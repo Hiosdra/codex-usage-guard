@@ -22,9 +22,10 @@ export interface WorkdayPacingInput {
   epochId: string;
 }
 
-export class MonthlyAiCreditsWorkdaysStrategy
-  implements PacingStrategy<WorkdayPacingInput, WorkdayPacingResult>
-{
+export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
+  WorkdayPacingInput,
+  WorkdayPacingResult
+> {
   evaluate(input: WorkdayPacingInput): WorkdayPacingResult {
     const { snapshot, override } = input;
     const workdays = input.workdays ?? [1, 2, 3, 4, 5];

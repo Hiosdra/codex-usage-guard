@@ -16,9 +16,10 @@ export interface WeeklyPacingInput {
   epochId: string;
 }
 
-export class WeeklyPercentagePacingStrategy
-  implements PacingStrategy<WeeklyPacingInput, WeeklyPacingResult>
-{
+export class WeeklyPercentagePacingStrategy implements PacingStrategy<
+  WeeklyPacingInput,
+  WeeklyPacingResult
+> {
   evaluate(input: WeeklyPacingInput): WeeklyPacingResult {
     const { snapshot, override } = input;
     const elapsedSeconds = Math.max(
