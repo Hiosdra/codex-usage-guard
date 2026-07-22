@@ -1,0 +1,14 @@
+{
+  "id": 2,
+  "result": {
+    "rateLimits": {
+      "limitId": "codex",
+      "planType": "business",
+      "credits": { "hasCredits": true, "unlimited": false, "balance": null },
+      "individualLimit": { "limit": "1000", "used": "420.5", "remainingPercent": 58, "resetsAt": 1790812800 },
+      "spendControlReached": false,
+      "rateLimitReachedType": null
+    },
+    "rateLimitResetCredits": { "availableCount": 0, "credits": [] }
+  }
+}

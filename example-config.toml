@@ -1,0 +1,41 @@
+active_profile = "auto"
+
+[personal]
+strategy = "weekly_percentage_pacing"
+base_lead = "24h"
+warning_after = "0h"
+extension_step = "24h"
+
+[work]
+strategy = "monthly_ai_credits_workdays"
+timezone = "system"
+workdays = ["mon", "tue", "wed", "thu", "fri"]
+budget_release = "start_of_day"
+warning_after_workdays_ahead = 0
+block_after_workdays_ahead = 1
+extension_step_workdays = 1
+
+[overrides]
+reset_on_quota_reset = true
+warning_during_unlock = true
+
+[data]
+source = "codex_app_server"
+fallback_to_session_files = true
+cache_ttl = "60s"
+maximum_stale_age = "15m"
+app_server_timeout = "5s"
+missing_data_action = "warn"
+
+[reset_detection]
+weekly_used_percent_drop_threshold = "1.0"
+business_used_credits_drop_threshold = "1.0"
+confirmation_reads = 2
+confirmation_interval = "2s"
+
+[display]
+timezone = "system"
+credit_decimal_places = 2
+percentage_decimal_places = 1
+show_unlock_time = true
+show_daily_budget = true
