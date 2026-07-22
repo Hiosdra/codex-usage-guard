@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/Hiosdra/codex-usage-guard/security/advisories/new
+    about: Please do not disclose security vulnerabilities in a public issue.
+  - name: Read the documentation first
+    url: https://github.com/Hiosdra/codex-usage-guard#readme
+    about: Installation, configuration, usage, and platform notes are in the README.

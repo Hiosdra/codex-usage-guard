@@ -1,0 +1,6 @@
+# Default owner for all repository changes.
+* @Hiosdra
+
+# Keep security and automation changes explicitly owned as well.
+/.github/ @Hiosdra
+/SECURITY.md @Hiosdra

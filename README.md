@@ -3,6 +3,8 @@
 A local CLI and Codex `UserPromptSubmit` hook that paces usage against a
 linear schedule. It supports two profiles:
 
+[![CI](https://github.com/Hiosdra/codex-usage-guard/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Hiosdra/codex-usage-guard/actions/workflows/ci.yml)
+
 - Plus/Pro: a percentage limit in an approximately seven-day window;
 - Business/Enterprise: a monthly AI Credits limit distributed across
   Monday-to-Friday workdays.
@@ -212,6 +214,13 @@ generates SHA-256 files. Releases are not published automatically.
 
 The full tested Codex integration contract is documented in
 [docs/codex-integration.md](docs/codex-integration.md).
+
+## Contributing and security
+
+Please use the issue forms for reproducible bugs and focused feature requests.
+Pull requests should include tests, documentation updates where relevant, and
+confirmation that prompts, credentials, and private runtime data are not
+included. See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## Limitations
 
