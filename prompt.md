@@ -1915,8 +1915,6 @@ Opcjonalnie przygotuj:
 
 - Homebrew formula;
 - wewnętrzny tap;
-- podpisywanie;
-- notarization.
 
 Nie uzależniaj działania aplikacji od Homebrew.
 
