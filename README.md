@@ -28,11 +28,43 @@ bun run build
 ./dist/codex-usage-guard install-hook
 ```
 
-After installation, trust the hook in Codex if the CLI lists it as new or
-changed (for example, through `/hooks`). The installer edits only the global
-`~/.codex/hooks.json`, creates a backup, and preserves other hooks.
+After running `install-hook`, trust the hook in Codex if the CLI lists it as
+new or changed (for example, through `/hooks`). The command edits only the
+global `~/.codex/hooks.json`, creates a backup, and preserves other hooks.
 
-## Installation and first use
+## Binary installation
+
+The simplest option is to download a verified, standalone binary from the
+[GitHub Releases](https://github.com/Hiosdra/codex-usage-guard/releases) page.
+It does not require Bun, Node.js, npm, or Homebrew.
+
+To install the latest release into `~/.local/bin`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.1.0/install.sh | sh
+```
+
+The installer detects macOS or Linux on arm64 or x64, downloads the matching
+archive, verifies it against `SHA256SUMS`, and never changes the Codex hook.
+Use `CODEX_USAGE_GUARD_VERSION` to select another release or
+`CODEX_USAGE_GUARD_INSTALL_DIR` to select another destination.
+
+On macOS or Linux with Homebrew, the prebuilt binary is also available from
+the project's tap:
+
+```sh
+brew tap Hiosdra/tap
+brew install --cask codex-usage-guard
+```
+
+After either binary installation, run:
+
+```sh
+codex-usage-guard doctor
+codex-usage-guard install-hook
+```
+
+## Source installation and first use
 
 The source installation is the same on macOS and Linux:
 
@@ -210,7 +242,8 @@ bun build ./src/cli.ts --compile --outfile dist/codex-usage-guard
 ```
 
 CI builds all four targets, runs tests and smoke checks, creates archives, and
-generates SHA-256 files. Releases are not published automatically.
+generates SHA-256 files. Pushing a version tag such as `v0.1.0` publishes a
+GitHub Release with the four archives and a `SHA256SUMS` file.
 
 The full tested Codex integration contract is documented in
 [docs/codex-integration.md](docs/codex-integration.md).
