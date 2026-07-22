@@ -49,10 +49,6 @@ archive, verifies it against `SHA256SUMS`, and never changes the Codex hook.
 Use `CODEX_USAGE_GUARD_VERSION` to select another release or
 `CODEX_USAGE_GUARD_INSTALL_DIR` to select another destination.
 
-The prebuilt macOS archives are not currently signed or notarized with Apple
-Developer ID. If Gatekeeper policy is strict, use the Homebrew Formula below
-or build from source instead.
-
 On macOS or Linux with Homebrew, the project's Formula builds the executable
 locally from source:
 
@@ -250,8 +246,7 @@ generates SHA-256 files. Pushing a version tag such as `v0.1.0` publishes a
 GitHub Release with the four archives and a `SHA256SUMS` file.
 
 The [Hiosdra Homebrew tap](https://github.com/Hiosdra/homebrew-tap) provides a
-Formula that builds the executable locally with Bun, including on macOS where
-Gatekeeper can reject unsigned downloaded binaries.
+Formula that builds the executable locally with Bun.
 
 The full tested Codex integration contract is documented in
 [docs/codex-integration.md](docs/codex-integration.md).
