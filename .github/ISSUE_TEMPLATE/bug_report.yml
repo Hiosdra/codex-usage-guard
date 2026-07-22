@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a reproducible problem with Codex Usage Guard
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please remove secrets,
+        prompts, account identifiers, and private paths before submitting.
+
+  - type: input
+    id: codex-version
+    attributes:
+      label: Codex version
+      description: Include the output of `codex --version`.
+      placeholder: codex-cli 0.145.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS arm64
+        - macOS x64
+        - Linux arm64
+        - Linux x64
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest sequence of commands or actions that demonstrates the issue.
+      placeholder: |
+        1. Run ...
+        2. Configure ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include a redacted error message or diagnostic output when useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste redacted output from `codex-usage-guard doctor` or relevant tests.
+      render: shell
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed prompts, credentials, tokens, email addresses, and private paths.
+          required: true

@@ -46,10 +46,9 @@ export class StateStore {
     );
     const version =
       this.db
-        .query<
-          { version: number },
-          []
-        >("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations")
+        .query<{ version: number }, []>(
+          "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations",
+        )
         .get()?.version ?? 0;
     if (version < 1) {
       this.db.exec(`
@@ -84,18 +83,16 @@ export class StateStore {
     if (profile)
       return (
         this.db
-          .query<
-            StoredSnapshot,
-            [string]
-          >("SELECT id, profile, strategy, epoch_id AS epochId, resets_at AS resetsAt, limit_value AS limitValue, used_value AS usedValue, used_percent AS usedPercent, observed_at AS observedAt, source, payload FROM usage_snapshots WHERE profile = ? ORDER BY observed_at DESC, id DESC LIMIT 1")
+          .query<StoredSnapshot, [string]>(
+            "SELECT id, profile, strategy, epoch_id AS epochId, resets_at AS resetsAt, limit_value AS limitValue, used_value AS usedValue, used_percent AS usedPercent, observed_at AS observedAt, source, payload FROM usage_snapshots WHERE profile = ? ORDER BY observed_at DESC, id DESC LIMIT 1",
+          )
           .get(profile) ?? undefined
       );
     return (
       this.db
-        .query<
-          StoredSnapshot,
-          []
-        >("SELECT id, profile, strategy, epoch_id AS epochId, resets_at AS resetsAt, limit_value AS limitValue, used_value AS usedValue, used_percent AS usedPercent, observed_at AS observedAt, source, payload FROM usage_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1")
+        .query<StoredSnapshot, []>(
+          "SELECT id, profile, strategy, epoch_id AS epochId, resets_at AS resetsAt, limit_value AS limitValue, used_value AS usedValue, used_percent AS usedPercent, observed_at AS observedAt, source, payload FROM usage_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1",
+        )
         .get() ?? undefined
     );
   }
@@ -140,10 +137,9 @@ export class StateStore {
           new Date().toISOString(),
         );
       const current = this.db
-        .query<
-          { epoch_id: string },
-          [string, string]
-        >("SELECT epoch_id FROM overrides WHERE profile = ? AND strategy = ?")
+        .query<{ epoch_id: string }, [string, string]>(
+          "SELECT epoch_id FROM overrides WHERE profile = ? AND strategy = ?",
+        )
         .get(epoch.profile, epoch.strategy);
       if (current && current.epoch_id !== epoch.epochId)
         this.db
@@ -210,10 +206,9 @@ export class StateStore {
   ): OverrideState {
     const tx = this.db.transaction(() => {
       const current = this.db
-        .query<
-          { epoch_id: string },
-          [string, string]
-        >("SELECT epoch_id FROM overrides WHERE profile = ? AND strategy = ?")
+        .query<{ epoch_id: string }, [string, string]>(
+          "SELECT epoch_id FROM overrides WHERE profile = ? AND strategy = ?",
+        )
         .get(profile, strategy);
       if (!current || current.epoch_id !== epochId)
         throw new Error(
@@ -271,7 +266,9 @@ export class StateStore {
       .query<
         { key: string; payload: string; observed_at: string; source: string },
         [string]
-      >("SELECT key, payload, observed_at, source FROM cache_entries WHERE key = ?")
+      >(
+        "SELECT key, payload, observed_at, source FROM cache_entries WHERE key = ?",
+      )
       .get(key);
     return row
       ? {
