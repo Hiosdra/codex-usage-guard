@@ -100,8 +100,14 @@ describe("display", () => {
     expect(warningMessage(personal, defaultConfig())).toContain(
       "Codex weekly usage warning",
     );
+    expect(warningMessage(personal, defaultConfig())).toContain(
+      "- Weekly usage:",
+    );
     expect(warningMessage(work, defaultConfig())).toContain(
       "AI Credits usage warning",
+    );
+    expect(warningMessage(work, defaultConfig())).toContain(
+      "- Monthly credit limit:",
     );
   });
 

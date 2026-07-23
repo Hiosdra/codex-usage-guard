@@ -27,7 +27,7 @@ The fastest path is a standalone release binary for macOS or Linux on arm64 or
 x64:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.2.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.2.2/install.sh | sh
 ```
 
 Or build locally through the Homebrew Formula:
