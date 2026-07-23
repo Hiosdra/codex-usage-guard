@@ -18,11 +18,18 @@ export function hooksPath(): string {
 function quoteCommand(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
+function stableExecutablePath(executable: string): string {
+  const homebrewPath = executable.match(
+    /^(.*)\/Cellar\/[^/]+\/[^/]+\/bin\/([^/]+)$/,
+  );
+  if (!homebrewPath) return executable;
+  return join(homebrewPath[1]!, "bin", homebrewPath[2]!);
+}
 export function installedHookCommand(): string {
   const marker = " --managed-by=codex-usage-guard";
   if (process.env.CODEX_USAGE_GUARD_HOOK_COMMAND)
     return `${process.env.CODEX_USAGE_GUARD_HOOK_COMMAND}${marker}`;
-  const executable = process.execPath;
+  const executable = stableExecutablePath(process.execPath);
   const script = process.argv[1];
   if (
     executable.endsWith("/bun") ||
