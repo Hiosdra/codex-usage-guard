@@ -78,8 +78,9 @@ jobs:
             --target=${{ matrix.bun_target }} \
             --outfile=dist/codex-usage-guard-${{ matrix.target }}
           cp dist/codex-usage-guard-${{ matrix.target }} package/codex-usage-guard
+          ln -s codex-usage-guard package/cug
           tar -czf codex-usage-guard-${{ matrix.target }}.tar.gz \
-            -C package codex-usage-guard
+            -C package codex-usage-guard cug
 
       - name: Upload release archive
         uses: actions/upload-artifact@v7.0.1

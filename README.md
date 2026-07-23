@@ -33,8 +33,19 @@ curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.1.0/in
 Or build locally through the Homebrew Formula:
 
 ```sh
+brew trust hiosdra/tap
 brew tap Hiosdra/tap
 brew install codex-usage-guard
+```
+
+The installation also provides the shorter `cug` command. With no arguments,
+both command names show the help; use `status` to see the current status:
+
+```sh
+codex-usage-guard status
+cug status
+cug
+cug --help
 ```
 
 The source-build option is also available for contributors; see
@@ -57,6 +68,8 @@ codex-usage-guard install-hook
 
 If Codex asks you to trust a new or changed hook, review and approve it through
 `/hooks`. The hook installer creates a backup and preserves your other hooks.
+When using the Codex desktop app, accept the hook in
+`Settings -> Coding -> Hooks`.
 
 ## What it feels like
 

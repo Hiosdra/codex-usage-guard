@@ -24,8 +24,15 @@ const EXIT = {
   integration: 50,
 } as const;
 
+function commandName(): "cug" | "codex-usage-guard" {
+  const executable = process.argv0 ?? process.argv[0] ?? "";
+  const name = executable.split(/[\\/]/).at(-1);
+  return name === "cug" ? "cug" : "codex-usage-guard";
+}
+
 function help(): string {
-  return `codex-usage-guard — local Codex quota pacing\n\nUsage:\n  codex-usage-guard status\n  codex-usage-guard check [--json]\n  codex-usage-guard extend [count]\n  codex-usage-guard unlock [--until-reset]\n  codex-usage-guard reset-overrides\n  codex-usage-guard install-hook\n  codex-usage-guard uninstall-hook\n  codex-usage-guard doctor\n  codex-usage-guard config-path\n  codex-usage-guard state-path\n  codex-usage-guard profile [auto|personal|work]\n\nThe hidden 'hook' command is invoked by Codex's UserPromptSubmit hook.`;
+  const name = commandName();
+  return `${name} — local Codex quota pacing\n\nUsage:\n  ${name} status                         Show the current usage decision\n  ${name} check [--json]                 Check usage, optionally as JSON\n  ${name} extend [count]                  Temporarily increase the allowed lead\n  ${name} unlock [--until-reset]         Disable blocking until the quota resets\n  ${name} reset-overrides                Remove temporary extensions and unlocks\n  ${name} install-hook                   Install the Codex prompt hook\n  ${name} uninstall-hook                 Remove this application's prompt hook\n  ${name} doctor                         Check Codex integration and local setup\n  ${name} config-path                    Print the configuration file path\n  ${name} state-path                     Print the state database path\n  ${name} profile [auto|personal|work]   Show or set the active profile\n\nThe hidden 'hook' command is invoked by Codex's UserPromptSubmit hook.`;
 }
 async function withGuard<T>(
   fn: (
@@ -162,7 +169,7 @@ export async function main(
   args: string[],
   hookInput?: string,
 ): Promise<number> {
-  const command = args[0] ?? "status";
+  const command = args[0] ?? "--help";
   if (command === "--help" || command === "-h" || command === "help") {
     console.log(help());
     return 0;
