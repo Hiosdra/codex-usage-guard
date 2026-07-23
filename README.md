@@ -126,6 +126,7 @@ The complete option reference and behavior guide is in
 - [Usage and configuration](docs/usage-and-configuration.md) — commands, profiles, pacing, configuration, files, and exit codes;
 - [Codex integration contract](docs/codex-integration.md) — App Server, hook, fallback, and data-source details;
 - [Example configuration](example-config.toml) — a commented starting point;
+- [Deployment](DEPLOYMENT.md) — repeatable GitHub Release and Homebrew tap checklist;
 - [Security policy](SECURITY.md) — vulnerability reporting and security scope.
 
 ## Development
