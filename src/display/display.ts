@@ -22,6 +22,9 @@ function decimal(
 function decisionLabel(decision: string): string {
   return decision.toUpperCase();
 }
+function warningList(lines: string[]): string {
+  return lines.map((line) => `- ${line}`).join("\n");
+}
 
 export function resultJson(result: PacingResult): Record<string, unknown> {
   if (result.profile === "personal")
@@ -80,8 +83,20 @@ export function resultJson(result: PacingResult): Record<string, unknown> {
 
 export function warningMessage(result: PacingResult, config: Config): string {
   if (result.profile === "personal")
-    return `Codex weekly usage warning\n\nWeekly usage:          ${decimal(result.usedPercent, config.display.percentageDecimalPlaces)}%\nLinear schedule:       ${decimal(result.scheduledPercent, config.display.percentageDecimalPlaces)}%\nAhead of schedule:     ${durationLabel(result.aheadSeconds)}\nBlocking threshold:    ${durationLabel(result.effectiveLeadSeconds)}\n\nThe prompt was allowed.`;
-  return `Codex AI Credits usage warning\n\nMonthly credit limit:  ${decimal(result.limitCredits, config.display.creditDecimalPlaces)}\nCredits used:          ${decimal(result.usedCredits, config.display.creditDecimalPlaces)}\nScheduled by now:      ${decimal(result.scheduledCredits, config.display.creditDecimalPlaces)}\nAhead of schedule:     ${decimal(result.aheadCredits, config.display.creditDecimalPlaces)} credits\nEquivalent lead:       ${decimal(result.aheadWorkdays, 2)} workday(s)\nBlocking threshold:    ${number(result.effectiveLeadWorkdays, 2)} workday(s)\n\nThe prompt was allowed.`;
+    return `Codex weekly usage warning\n\n${warningList([
+      `Weekly usage: ${decimal(result.usedPercent, config.display.percentageDecimalPlaces)}%`,
+      `Linear schedule: ${decimal(result.scheduledPercent, config.display.percentageDecimalPlaces)}%`,
+      `Ahead of schedule: ${durationLabel(result.aheadSeconds)}`,
+      `Blocking threshold: ${durationLabel(result.effectiveLeadSeconds)}`,
+    ])}\n\nThe prompt was allowed.`;
+  return `Codex AI Credits usage warning\n\n${warningList([
+    `Monthly credit limit: ${decimal(result.limitCredits, config.display.creditDecimalPlaces)}`,
+    `Credits used: ${decimal(result.usedCredits, config.display.creditDecimalPlaces)}`,
+    `Scheduled by now: ${decimal(result.scheduledCredits, config.display.creditDecimalPlaces)}`,
+    `Ahead of schedule: ${decimal(result.aheadCredits, config.display.creditDecimalPlaces)} credits`,
+    `Equivalent lead: ${decimal(result.aheadWorkdays, 2)} workday(s)`,
+    `Blocking threshold: ${number(result.effectiveLeadWorkdays, 2)} workday(s)`,
+  ])}\n\nThe prompt was allowed.`;
 }
 
 export function blockMessage(result: PacingResult, config: Config): string {
