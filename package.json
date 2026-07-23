@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-guard",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local Codex UserPromptSubmit hook that paces weekly usage or monthly AI Credits.",
   "type": "module",
   "private": true,
