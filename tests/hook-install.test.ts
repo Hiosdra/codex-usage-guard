@@ -88,6 +88,14 @@ describe("hook installation", () => {
         value: "/synthetic/codex-usage-guard",
       });
       expect(installedHookCommand()).toContain("codex-usage-guard' hook");
+      Object.defineProperty(process, "execPath", {
+        configurable: true,
+        value:
+          "/opt/homebrew/Cellar/codex-usage-guard/0.2.0/bin/codex-usage-guard",
+      });
+      expect(installedHookCommand()).toContain(
+        "'/opt/homebrew/bin/codex-usage-guard' hook",
+      );
     } finally {
       Object.defineProperty(process, "execPath", {
         configurable: true,
