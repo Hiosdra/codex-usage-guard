@@ -43,7 +43,7 @@ if (mode !== "handshake") console.log(JSON.stringify({ id: 2, result: { rateLimi
   return path;
 }
 
-function sequentialFakeProcess(): AppServerProcess {
+function sequentialFakeProcess(onEnd?: () => void): AppServerProcess {
   const encoder = new TextEncoder();
   let stdoutController: ReadableStreamDefaultController<Uint8Array>;
   const stdout = new ReadableStream<Uint8Array>({
@@ -69,6 +69,7 @@ function sequentialFakeProcess(): AppServerProcess {
       return 0;
     },
     end(): number {
+      onEnd?.();
       return 0;
     },
   };
@@ -150,11 +151,13 @@ describe("Codex App Server client", () => {
   });
 
   test("sends post-initialize messages only after the handshake response", async () => {
+    let ended = false;
     const client = new CodexAppServerClient({
       command: "synthetic-codex",
       timeoutMs: 1000,
-      spawnAppServer: () => sequentialFakeProcess(),
+      spawnAppServer: () => sequentialFakeProcess(() => (ended = true)),
     });
     await expect(client.readRateLimits()).resolves.toMatchObject({ id: 2 });
+    expect(ended).toBe(false);
   });
 });

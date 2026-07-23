@@ -92,7 +92,14 @@ else
   chmod 0755 "$prefix/codex-usage-guard"
 fi
 
+if [ ! -e "$prefix/cug" ] && [ ! -L "$prefix/cug" ]; then
+  ln -s codex-usage-guard "$prefix/cug"
+fi
+
 printf '%s\n' "Installed codex-usage-guard $version for $target at $prefix/codex-usage-guard"
+if [ -L "$prefix/cug" ]; then
+  printf '%s\n' "Installed cug alias at $prefix/cug"
+fi
 case ":${PATH:-}:" in
   *":$prefix:"*) ;;
   *) printf '%s\n' "Add $prefix to PATH to run: codex-usage-guard doctor" ;;

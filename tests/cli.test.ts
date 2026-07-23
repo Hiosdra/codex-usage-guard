@@ -79,6 +79,33 @@ confirmation_interval = "0s"
 }
 
 describe("CLI", () => {
+  test("defaults to help for codex-usage-guard and cug", async () => {
+    await setupCli();
+
+    const originalArgv0 = process.argv0;
+    const output: string[] = [];
+    const originalLog = console.log;
+    try {
+      process.argv0 = "/synthetic/codex-usage-guard";
+      console.log = (...args) => output.push(args.join(" "));
+      expect(await main([])).toBe(0);
+
+      process.argv0 = "/synthetic/cug";
+      expect(await main([])).toBe(0);
+    } finally {
+      process.argv0 = originalArgv0;
+      console.log = originalLog;
+    }
+
+    const help = output.join("\n");
+    expect(help).toContain("codex-usage-guard — local Codex quota pacing");
+    expect(help).toContain("codex-usage-guard status");
+    expect(help).toContain("cug — local Codex quota pacing");
+    expect(help).toContain("cug status");
+    expect(help).toContain("Show the current usage decision");
+    expect(help).toContain("cug install-hook");
+  });
+
   test("supports inspection, controls, hook installation, and diagnostics", async () => {
     const paths = await setupCli();
     expect(await main(["--help"])).toBe(0);

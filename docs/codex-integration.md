@@ -69,8 +69,8 @@ sends `initialize` first and waits for its response before sending the
 
 ```json
 {"id":1,"method":"initialize","params":{"clientInfo":{"name":"codex-usage-guard","title":"Codex Usage Guard","version":"0.1.0"},"capabilities":{}}}
-{"method":"initialized","params":{}}
-{"id":2,"method":"account/rateLimits/read","params":{}}
+{"method":"initialized"}
+{"id":2,"method":"account/rateLimits/read"}
 ```
 
 The response is selected by `id: 2`. A fresh read starts a separate process,

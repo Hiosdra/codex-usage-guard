@@ -55,14 +55,6 @@ async function flushInput(input: {
   }
 }
 
-function endInput(input: { end(): number | Promise<number> }): void {
-  try {
-    input.end();
-  } catch (error) {
-    if (!/EPERM|EPIPE|closed/i.test(String(error))) throw error;
-  }
-}
-
 export class CodexAppServerClient {
   constructor(private readonly options: AppServerClientOptions) {}
 
@@ -80,8 +72,8 @@ export class CodexAppServerClient {
           capabilities: {},
         },
       },
-      { method: "initialized", params: {} },
-      { id: 2, method: "account/rateLimits/read", params: {} },
+      { method: "initialized" },
+      { id: 2, method: "account/rateLimits/read" },
     ]);
     return message;
   }
@@ -100,7 +92,7 @@ export class CodexAppServerClient {
           capabilities: {},
         },
       },
-      { method: "initialized", params: {} },
+      { method: "initialized" },
     ]);
   }
 
@@ -166,7 +158,6 @@ export class CodexAppServerClient {
             for (const request of requests.slice(1))
               input.write(`${JSON.stringify(request)}\n`);
             await flushInput(input);
-            endInput(input);
             sentAfterInitialize = true;
             if (targetId === 1) return message;
             continue;
@@ -192,7 +183,6 @@ export class CodexAppServerClient {
             for (const request of requests.slice(1))
               input.write(`${JSON.stringify(request)}\n`);
             await flushInput(input);
-            endInput(input);
             sentAfterInitialize = true;
             if (targetId === 1) return message;
           } else if (message.id === targetId) {

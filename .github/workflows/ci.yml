@@ -27,7 +27,9 @@ jobs:
       - run: bun run lint
       - run: bun run test:coverage
       - run: bun build ./src/cli.ts --compile --outfile dist/codex-usage-guard-linux-x64
+      - run: ln -s codex-usage-guard-linux-x64 dist/cug
       - run: ./dist/codex-usage-guard-linux-x64 --help
+      - run: ./dist/cug
       - run: sha256sum dist/codex-usage-guard-linux-x64 > dist/SHA256SUMS
 
   cross-build:
