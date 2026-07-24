@@ -113,6 +113,24 @@ await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
         await mkdir(dirname(executable), { recursive: true });
         await Bun.write(executable, "homebrew binary");
         await Bun.write(
+          hooks,
+          JSON.stringify({
+            hooks: {
+              UserPromptSubmit: [
+                {
+                  hooks: [
+                    { type: "command", command: "other-tool" },
+                    {
+                      type: "command",
+                      command: "old --managed-by=codex-usage-guard",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        );
+        await Bun.write(
           brew,
           `#!/usr/bin/env bun
 await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
@@ -138,6 +156,72 @@ await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
             "uninstall --formula codex-usage-guard",
           );
           expect(await Bun.file(executable).exists()).toBe(true);
+          const hooksValue = JSON.parse(await Bun.file(hooks).text()) as {
+            hooks: { UserPromptSubmit: Array<{ hooks: unknown[] }> };
+          };
+          expect(hooksValue.hooks.UserPromptSubmit[0]!.hooks).toEqual([
+            { type: "command", command: "other-tool" },
+          ]);
+        } finally {
+          Object.defineProperty(process, "execPath", {
+            configurable: true,
+            value: originalExecPath,
+          });
+          process.argv0 = originalArgv0;
+        }
+      },
+    ));
+
+  test("fails without removing data when Homebrew uninstall fails", () =>
+    withTestIsolation(
+      [
+        "PATH",
+        "CODEX_USAGE_GUARD_CONFIG",
+        "CODEX_USAGE_GUARD_STATE",
+        "CODEX_USAGE_GUARD_CACHE",
+        "CODEX_USAGE_GUARD_LOG",
+        "CODEX_USAGE_GUARD_HOOKS_PATH",
+        "CODEX_USAGE_GUARD_BREW_COMMAND",
+      ],
+      async () => {
+        root = await mkdtemp(join(tmpdir(), "cug-cli-uninstall-brew-failure-"));
+        const executable = join(
+          root,
+          "Cellar",
+          "codex-usage-guard",
+          "0.2.2",
+          "bin",
+          "codex-usage-guard",
+        );
+        const hooks = join(root, "hooks.json");
+        const config = join(root, "config.toml");
+        const state = join(root, "state.sqlite");
+        const missingBrew = join(root, "missing-brew");
+        await mkdir(dirname(executable), { recursive: true });
+        await Bun.write(executable, "homebrew binary");
+        await Bun.write(config, "config");
+        await Bun.write(state, "state");
+
+        const originalExecPath = process.execPath;
+        const originalArgv0 = process.argv0;
+        try {
+          Object.defineProperty(process, "execPath", {
+            configurable: true,
+            value: executable,
+          });
+          process.argv0 = join(root, "cug");
+          process.env.PATH = root;
+          process.env.CODEX_USAGE_GUARD_CONFIG = config;
+          process.env.CODEX_USAGE_GUARD_STATE = state;
+          process.env.CODEX_USAGE_GUARD_CACHE = join(root, "cache");
+          process.env.CODEX_USAGE_GUARD_LOG = join(root, "logs");
+          process.env.CODEX_USAGE_GUARD_HOOKS_PATH = hooks;
+          process.env.CODEX_USAGE_GUARD_BREW_COMMAND = missingBrew;
+
+          expect(await main(["uninstall", "--purge"])).toBe(40);
+          expect(await Bun.file(executable).exists()).toBe(true);
+          expect(await Bun.file(config).exists()).toBe(true);
+          expect(await Bun.file(state).exists()).toBe(true);
         } finally {
           Object.defineProperty(process, "execPath", {
             configurable: true,
@@ -176,6 +260,7 @@ await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
     await writeFile(paths.state, "state");
     await writeFile(`${paths.state}-wal`, "wal");
     await writeFile(`${paths.state}-shm`, "shm");
+    await writeFile(`${paths.state}-journal`, "journal");
     await mkdir(paths.cache, { recursive: true });
     await mkdir(paths.logs, { recursive: true });
     await Bun.write(join(paths.cache, "cache.json"), "cache");
@@ -190,8 +275,33 @@ await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
     expect(await Bun.file(paths.state).exists()).toBe(false);
     expect(await Bun.file(`${paths.state}-wal`).exists()).toBe(false);
     expect(await Bun.file(`${paths.state}-shm`).exists()).toBe(false);
+    expect(await Bun.file(`${paths.state}-journal`).exists()).toBe(false);
     expect(await Bun.file(paths.cache).exists()).toBe(false);
     expect(await Bun.file(paths.logs).exists()).toBe(false);
     expect(await Bun.file(join(root, "keep.txt")).exists()).toBe(true);
+  });
+
+  test("does not purge CODEX_HOME when it is reused as a data path", async () => {
+    root = await mkdtemp(join(tmpdir(), "cug-purge-codex-home-"));
+    const codexHome = join(root, "codex-home");
+    const paths: Paths = {
+      config: join(root, "settings.ini"),
+      state: join(root, "usage.db"),
+      cache: codexHome,
+      logs: join(root, "logs-dir"),
+      codexHome,
+    };
+    await writeFile(paths.config, "config");
+    await writeFile(paths.state, "state");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(join(codexHome, "hooks.json"), "hook");
+
+    const removed = await purgeData(paths);
+
+    expect(removed).toContain(paths.config);
+    expect(removed).toContain(paths.state);
+    expect(await Bun.file(paths.config).exists()).toBe(false);
+    expect(await Bun.file(paths.state).exists()).toBe(false);
+    expect(await Bun.file(join(codexHome, "hooks.json")).exists()).toBe(true);
   });
 });

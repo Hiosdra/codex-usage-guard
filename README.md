@@ -55,11 +55,14 @@ curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/master/in
   | CODEX_USAGE_GUARD_VERSION=v0.2.2 sh
 ```
 
+If the original installation used `CODEX_USAGE_GUARD_INSTALL_DIR`, pass the
+same directory again when updating.
+
 For a Homebrew installation, refresh the tap and upgrade the formula:
 
 ```sh
 brew update
-brew upgrade codex-usage-guard
+brew upgrade hiosdra/tap/codex-usage-guard
 ```
 
 Updating either installation keeps the existing Codex hook and local data.

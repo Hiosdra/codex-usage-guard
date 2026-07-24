@@ -1,6 +1,6 @@
 import { lstat, realpath, rm, unlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import type { Paths } from "../config/config.ts";
 
 const EXECUTABLE_NAMES = new Set(["codex-usage-guard", "cug"]);
@@ -167,7 +167,10 @@ async function removeDirectory(path: string): Promise<boolean> {
   }
 }
 
-function safePurgePath(path: string): string | undefined {
+function safePurgePath(
+  path: string,
+  protectedSubtrees: readonly string[] = [],
+): string | undefined {
   const candidate = absolutePath(path);
   const protectedRoots = new Set([
     resolve("/"),
@@ -176,22 +179,33 @@ function safePurgePath(path: string): string | undefined {
     resolve(tmpdir()),
     resolve(process.cwd()),
   ]);
-  if (protectedRoots.has(candidate)) return undefined;
+  if (
+    protectedRoots.has(candidate) ||
+    protectedSubtrees.some(
+      (root) => candidate === root || candidate.startsWith(`${root}${sep}`),
+    )
+  )
+    return undefined;
   return candidate;
 }
 
 export async function purgeData(paths: Paths): Promise<string[]> {
   const removed: string[] = [];
+  const protectedSubtrees = [absolutePath(paths.codexHome)];
   const files = [
-    safePurgePath(paths.config),
-    safePurgePath(paths.state),
-    safePurgePath(paths.state + "-wal"),
-    safePurgePath(paths.state + "-shm"),
+    safePurgePath(paths.config, protectedSubtrees),
+    safePurgePath(paths.state, protectedSubtrees),
+    safePurgePath(paths.state + "-wal", protectedSubtrees),
+    safePurgePath(paths.state + "-shm", protectedSubtrees),
+    safePurgePath(paths.state + "-journal", protectedSubtrees),
   ];
   for (const path of files)
     if (path && (await removeFile(path))) removed.push(path);
 
-  const directories = [safePurgePath(paths.logs), safePurgePath(paths.cache)];
+  const directories = [
+    safePurgePath(paths.logs, protectedSubtrees),
+    safePurgePath(paths.cache, protectedSubtrees),
+  ];
   const seen = new Set<string>();
   for (const path of directories)
     if (path && !seen.has(path)) {
