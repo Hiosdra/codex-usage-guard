@@ -38,6 +38,32 @@ brew tap Hiosdra/tap
 brew install codex-usage-guard
 ```
 
+### Update
+
+For a standalone release installation, run the installer again. It downloads
+the latest release and replaces the existing binary in place:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/master/install.sh | sh
+```
+
+To install a specific release instead, set `CODEX_USAGE_GUARD_VERSION`, for
+example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/master/install.sh \
+  | CODEX_USAGE_GUARD_VERSION=v0.2.2 sh
+```
+
+For a Homebrew installation, refresh the tap and upgrade the formula:
+
+```sh
+brew update
+brew upgrade codex-usage-guard
+```
+
+Updating either installation keeps the existing Codex hook and local data.
+
 The installation also provides the shorter `cug` command. With no arguments,
 both command names show the help; use `status` to see the current status:
 

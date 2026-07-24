@@ -16,6 +16,7 @@ import {
   uninstallSelf,
 } from "../src/platform/uninstall.ts";
 import type { Paths } from "../src/config/config.ts";
+import { withTestIsolation } from "./test-isolation.ts";
 
 let root: string | undefined;
 
@@ -89,66 +90,63 @@ await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
     );
   });
 
-  test("CLI removes the hook before delegating a Homebrew uninstall", async () => {
-    root = await mkdtemp(join(tmpdir(), "cug-cli-uninstall-brew-"));
-    const executable = join(
-      root,
-      "Cellar",
-      "codex-usage-guard",
-      "0.2.2",
-      "bin",
-      "codex-usage-guard",
-    );
-    const brew = join(root, "brew");
-    const marker = join(root, "brew-arguments");
-    const hooks = join(root, "hooks.json");
-    await mkdir(dirname(executable), { recursive: true });
-    await Bun.write(executable, "homebrew binary");
-    await Bun.write(
-      brew,
-      `#!/usr/bin/env bun
+  test("CLI removes the hook before delegating a Homebrew uninstall", () =>
+    withTestIsolation(
+      [
+        "PATH",
+        "CODEX_USAGE_GUARD_HOOKS_PATH",
+        "CODEX_USAGE_GUARD_BREW_COMMAND",
+      ],
+      async () => {
+        root = await mkdtemp(join(tmpdir(), "cug-cli-uninstall-brew-"));
+        const executable = join(
+          root,
+          "Cellar",
+          "codex-usage-guard",
+          "0.2.2",
+          "bin",
+          "codex-usage-guard",
+        );
+        const brew = join(root, "brew");
+        const marker = join(root, "brew-arguments");
+        const hooks = join(root, "hooks.json");
+        await mkdir(dirname(executable), { recursive: true });
+        await Bun.write(executable, "homebrew binary");
+        await Bun.write(
+          brew,
+          `#!/usr/bin/env bun
 await Bun.write(${JSON.stringify(marker)}, process.argv.slice(2).join(" "));
 `,
-    );
-    await chmod(executable, 0o755);
-    await chmod(brew, 0o700);
+        );
+        await chmod(executable, 0o755);
+        await chmod(brew, 0o700);
 
-    const originalExecPath = process.execPath;
-    const originalArgv0 = process.argv0;
-    const originalPath = process.env.PATH;
-    const originalHooksPath = process.env.CODEX_USAGE_GUARD_HOOKS_PATH;
-    const originalBrewCommand = process.env.CODEX_USAGE_GUARD_BREW_COMMAND;
-    try {
-      Object.defineProperty(process, "execPath", {
-        configurable: true,
-        value: executable,
-      });
-      process.argv0 = join(root, "cug");
-      process.env.PATH = `${root}:${originalPath ?? ""}`;
-      process.env.CODEX_USAGE_GUARD_HOOKS_PATH = hooks;
-      process.env.CODEX_USAGE_GUARD_BREW_COMMAND = brew;
+        const originalExecPath = process.execPath;
+        const originalArgv0 = process.argv0;
+        try {
+          Object.defineProperty(process, "execPath", {
+            configurable: true,
+            value: executable,
+          });
+          process.argv0 = join(root, "cug");
+          process.env.PATH = `${root}:${process.env.PATH ?? ""}`;
+          process.env.CODEX_USAGE_GUARD_HOOKS_PATH = hooks;
+          process.env.CODEX_USAGE_GUARD_BREW_COMMAND = brew;
 
-      expect(await main(["uninstall"])).toBe(0);
-      expect(await Bun.file(marker).text()).toBe(
-        "uninstall --formula codex-usage-guard",
-      );
-      expect(await Bun.file(executable).exists()).toBe(true);
-    } finally {
-      Object.defineProperty(process, "execPath", {
-        configurable: true,
-        value: originalExecPath,
-      });
-      process.argv0 = originalArgv0;
-      if (originalPath === undefined) delete process.env.PATH;
-      else process.env.PATH = originalPath;
-      if (originalHooksPath === undefined)
-        delete process.env.CODEX_USAGE_GUARD_HOOKS_PATH;
-      else process.env.CODEX_USAGE_GUARD_HOOKS_PATH = originalHooksPath;
-      if (originalBrewCommand === undefined)
-        delete process.env.CODEX_USAGE_GUARD_BREW_COMMAND;
-      else process.env.CODEX_USAGE_GUARD_BREW_COMMAND = originalBrewCommand;
-    }
-  });
+          expect(await main(["uninstall"])).toBe(0);
+          expect(await Bun.file(marker).text()).toBe(
+            "uninstall --formula codex-usage-guard",
+          );
+          expect(await Bun.file(executable).exists()).toBe(true);
+        } finally {
+          Object.defineProperty(process, "execPath", {
+            configurable: true,
+            value: originalExecPath,
+          });
+          process.argv0 = originalArgv0;
+        }
+      },
+    ));
 
   test("reports an unavailable or failed Homebrew command", async () => {
     await expect(uninstallHomebrewFormula("")).resolves.toEqual({
