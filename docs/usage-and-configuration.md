@@ -14,6 +14,7 @@ codex-usage-guard unlock [--until-reset]
 codex-usage-guard reset-overrides
 codex-usage-guard install-hook
 codex-usage-guard uninstall-hook
+codex-usage-guard uninstall [--purge]
 codex-usage-guard doctor
 codex-usage-guard config-path
 codex-usage-guard state-path
@@ -139,10 +140,14 @@ CODEX_USAGE_GUARD_STATE
 CODEX_USAGE_GUARD_CACHE
 CODEX_HOME
 CODEX_USAGE_GUARD_HOOKS_PATH
+CODEX_USAGE_GUARD_BREW_COMMAND
 ```
 
 Advanced setups can set `CODEX_USAGE_GUARD_CODEX_COMMAND` to an explicit Codex
 executable path.
+
+`CODEX_USAGE_GUARD_BREW_COMMAND` can point to `brew` when Homebrew is not
+available through `PATH`.
 
 SQLite uses WAL, a five-second busy timeout, transactional overrides, and
 quota epochs. An override from an old epoch cannot overwrite a new epoch.
@@ -151,7 +156,14 @@ quota epochs. An override from an old epoch cannot overwrite a new epoch.
 
 `install-hook` edits only the global `~/.codex/hooks.json`, creates a backup,
 and preserves other hooks. `uninstall-hook` removes only this application's
-entry. The installer keeps its backup and does not delete the guard's state.
+entry. `uninstall` removes that hook and the standalone release binary plus
+the `cug` alias. It keeps application data by default; `uninstall --purge`
+also removes the configuration, SQLite state, cache, and logs at their
+configured paths. The installer keeps its hook backup.
+
+For Homebrew installations, prefer `cug uninstall`; it removes the hook and
+then invokes `brew uninstall codex-usage-guard`. Running `brew uninstall`
+directly removes the formula but does not remove the hook.
 
 Codex may require one-time approval for a new or changed hook through
 `/hooks`.

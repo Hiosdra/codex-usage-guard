@@ -71,6 +71,19 @@ If Codex asks you to trust a new or changed hook, review and approve it through
 When using the Codex desktop app, accept the hook in
 `Settings -> Coding -> Hooks`.
 
+To remove a standalone release installation, run:
+
+```sh
+cug uninstall
+```
+
+This removes CUG's hook, the release binary, and its `cug` alias while keeping
+local configuration and state. Add `--purge` to also remove CUG's configuration,
+SQLite state, cache, and logs at their configured paths. Homebrew installations
+should be removed with `cug uninstall` as well: it removes the hook and invokes
+`brew uninstall codex-usage-guard`. Running `brew uninstall` directly does not
+remove the hook.
+
 ## What it feels like
 
 Before each prompt, the guard checks whether your usage is on schedule:

@@ -104,6 +104,7 @@ describe("CLI", () => {
     expect(help).toContain("cug status");
     expect(help).toContain("Show the current usage decision");
     expect(help).toContain("cug install-hook");
+    expect(help).toContain("cug uninstall [--purge]");
   });
 
   test("supports inspection, controls, hook installation, and diagnostics", async () => {
@@ -159,11 +160,15 @@ console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
     expect(await main(["doctor"])).toBe(50);
     process.env.CODEX_USAGE_GUARD_STATE = paths.state;
     expect(await main(["uninstall-hook"])).toBe(0);
+    expect(await main(["uninstall"])).toBe(0);
 
     await Bun.write(paths.config, 'active_profile = "work"\n');
     expect(await main(["profile"])).toBe(30);
     expect(await main(["profile", "auto"])).toBe(0);
     expect(await main(["profile", "personal"])).toBe(0);
+    expect(await main(["uninstall", "--purge"])).toBe(0);
+    expect(await Bun.file(paths.config).exists()).toBe(false);
+    expect(await Bun.file(paths.state).exists()).toBe(false);
   });
 
   test("returns integration and argument errors with useful exit codes", async () => {
