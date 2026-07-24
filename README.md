@@ -27,7 +27,7 @@ The fastest path is a standalone release binary for macOS or Linux on arm64 or
 x64:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.2.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/v0.2.3/install.sh | sh
 ```
 
 Or build locally through the Homebrew Formula:
@@ -37,6 +37,35 @@ brew trust hiosdra/tap
 brew tap Hiosdra/tap
 brew install codex-usage-guard
 ```
+
+### Update
+
+For a standalone release installation, run the installer again. It downloads
+the latest release and replaces the existing binary in place:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/master/install.sh | sh
+```
+
+To install a specific release instead, set `CODEX_USAGE_GUARD_VERSION`, for
+example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hiosdra/codex-usage-guard/master/install.sh \
+  | CODEX_USAGE_GUARD_VERSION=v0.2.3 sh
+```
+
+If the original installation used `CODEX_USAGE_GUARD_INSTALL_DIR`, pass the
+same directory again when updating.
+
+For a Homebrew installation, refresh the tap and upgrade the formula:
+
+```sh
+brew update
+brew upgrade hiosdra/tap/codex-usage-guard
+```
+
+Updating either installation keeps the existing Codex hook and local data.
 
 The installation also provides the shorter `cug` command. With no arguments,
 both command names show the help; use `status` to see the current status:
@@ -70,6 +99,19 @@ If Codex asks you to trust a new or changed hook, review and approve it through
 `/hooks`. The hook installer creates a backup and preserves your other hooks.
 When using the Codex desktop app, accept the hook in
 `Settings -> Coding -> Hooks`.
+
+To remove a standalone release installation, run:
+
+```sh
+cug uninstall
+```
+
+This removes CUG's hook, the release binary, and its `cug` alias while keeping
+local configuration and state. Add `--purge` to also remove CUG's configuration,
+SQLite state, cache, and logs at their configured paths. Homebrew installations
+should be removed with `cug uninstall` as well: it removes the hook and invokes
+`brew uninstall codex-usage-guard`. Running `brew uninstall` directly does not
+remove the hook.
 
 ## What it feels like
 

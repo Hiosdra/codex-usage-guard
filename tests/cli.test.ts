@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main, run } from "../src/cli.ts";
+import { withTestIsolation } from "./test-isolation.ts";
 
 let root: string | undefined;
 const envNames = [
@@ -15,14 +16,8 @@ const envNames = [
   "CODEX_USAGE_GUARD_HOOKS_PATH",
   "CODEX_HOME",
 ];
-const originalEnv = new Map(envNames.map((name) => [name, process.env[name]]));
 
 afterEach(async () => {
-  for (const name of envNames) {
-    const value = originalEnv.get(name);
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
-  }
   if (root) await rm(root, { recursive: true, force: true });
   root = undefined;
 });
@@ -54,7 +49,7 @@ console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
   const config = join(root, "config.toml");
   const state = join(root, "state.sqlite");
   const hooks = join(root, "hooks.json");
-  process.env.PATH = `${bin}:${originalEnv.get("PATH") ?? ""}`;
+  process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
   process.env.CODEX_USAGE_GUARD_CONFIG = config;
   process.env.CODEX_USAGE_GUARD_STATE = state;
   process.env.CODEX_USAGE_GUARD_CACHE = join(root, "cache");
@@ -79,117 +74,128 @@ confirmation_interval = "0s"
 }
 
 describe("CLI", () => {
-  test("defaults to help for codex-usage-guard and cug", async () => {
-    await setupCli();
+  test("defaults to help for codex-usage-guard and cug", () =>
+    withTestIsolation(envNames, async () => {
+      await setupCli();
 
-    const originalArgv0 = process.argv0;
-    const output: string[] = [];
-    const originalLog = console.log;
-    try {
-      process.argv0 = "/synthetic/codex-usage-guard";
-      console.log = (...args) => output.push(args.join(" "));
-      expect(await main([])).toBe(0);
+      const originalArgv0 = process.argv0;
+      const output: string[] = [];
+      const originalLog = console.log;
+      try {
+        process.argv0 = "/synthetic/codex-usage-guard";
+        console.log = (...args) => output.push(args.join(" "));
+        expect(await main([])).toBe(0);
 
-      process.argv0 = "/synthetic/cug";
-      expect(await main([])).toBe(0);
-    } finally {
-      process.argv0 = originalArgv0;
-      console.log = originalLog;
-    }
+        process.argv0 = "/synthetic/cug";
+        expect(await main([])).toBe(0);
+      } finally {
+        process.argv0 = originalArgv0;
+        console.log = originalLog;
+      }
 
-    const help = output.join("\n");
-    expect(help).toContain("codex-usage-guard — local Codex quota pacing");
-    expect(help).toContain("codex-usage-guard status");
-    expect(help).toContain("cug — local Codex quota pacing");
-    expect(help).toContain("cug status");
-    expect(help).toContain("Show the current usage decision");
-    expect(help).toContain("cug install-hook");
-  });
+      const help = output.join("\n");
+      expect(help).toContain("codex-usage-guard — local Codex quota pacing");
+      expect(help).toContain("codex-usage-guard status");
+      expect(help).toContain("cug — local Codex quota pacing");
+      expect(help).toContain("cug status");
+      expect(help).toContain("Show the current usage decision");
+      expect(help).toContain("cug install-hook");
+      expect(help).toContain("cug uninstall [--purge]");
+    }));
 
-  test("supports inspection, controls, hook installation, and diagnostics", async () => {
-    const paths = await setupCli();
-    expect(await main(["--help"])).toBe(0);
-    expect(await main(["config-path"])).toBe(0);
-    expect(await main(["state-path"])).toBe(0);
+  test("supports inspection, controls, hook installation, and diagnostics", () =>
+    withTestIsolation(envNames, async () => {
+      const paths = await setupCli();
+      expect(await main(["--help"])).toBe(0);
+      expect(await main(["config-path"])).toBe(0);
+      expect(await main(["state-path"])).toBe(0);
 
-    expect(await main(["check", "--json"])).toBe(0);
-    expect(await main(["check"])).toBe(0);
-    const blockCommand = join(root!, "bin", "codex-block");
-    await Bun.write(
-      blockCommand,
-      `#!/usr/bin/env bun
+      expect(await main(["check", "--json"])).toBe(0);
+      expect(await main(["check"])).toBe(0);
+      const blockCommand = join(root!, "bin", "codex-block");
+      await Bun.write(
+        blockCommand,
+        `#!/usr/bin/env bun
 console.log(JSON.stringify({ id: 1, result: {} }));
 console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
   planType: "pro", usedPercent: 40, windowDurationMins: 10080, resetsAt: 1790812800,
 } } } }));
 `,
-    );
-    await chmod(blockCommand, 0o700);
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = blockCommand;
-    expect(await main(["check"])).toBe(20);
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = paths.command;
-    expect(await main(["status"])).toBe(0);
-    expect(await main(["profile"])).toBe(0);
-    expect(await main(["extend", "2"])).toBe(0);
-    expect(await main(["unlock"])).toBe(0);
-    expect(await main(["reset-overrides"])).toBe(0);
-    expect(
-      await main(
-        ["hook"],
-        JSON.stringify({ hook_event_name: "UserPromptSubmit" }),
-      ),
-    ).toBe(0);
+      );
+      await chmod(blockCommand, 0o700);
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = blockCommand;
+      expect(await main(["check"])).toBe(20);
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = paths.command;
+      expect(await main(["status"])).toBe(0);
+      expect(await main(["profile"])).toBe(0);
+      expect(await main(["extend", "2"])).toBe(0);
+      expect(await main(["unlock"])).toBe(0);
+      expect(await main(["reset-overrides"])).toBe(0);
+      expect(
+        await main(
+          ["hook"],
+          JSON.stringify({ hook_event_name: "UserPromptSubmit" }),
+        ),
+      ).toBe(0);
 
-    expect(await main(["install-hook"])).toBe(0);
-    expect(await main(["install-hook"])).toBe(0);
-    expect(await main(["doctor"])).toBe(0);
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = join(root!, "missing-codex");
-    expect(await main(["doctor"])).toBe(50);
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = "";
-    expect(await main(["doctor"])).toBe(50);
-    const cacheFile = join(root!, "cache-file");
-    await Bun.write(cacheFile, "not-a-directory");
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = paths.command;
-    process.env.CODEX_USAGE_GUARD_CACHE = cacheFile;
-    expect(await main(["doctor"])).toBe(50);
-    process.env.CODEX_USAGE_GUARD_CACHE = join(root!, "cache");
-    const stateDirectory = join(root!, "state-directory");
-    await mkdir(stateDirectory);
-    process.env.CODEX_USAGE_GUARD_STATE = stateDirectory;
-    expect(await main(["doctor"])).toBe(50);
-    process.env.CODEX_USAGE_GUARD_STATE = paths.state;
-    expect(await main(["uninstall-hook"])).toBe(0);
+      expect(await main(["install-hook"])).toBe(0);
+      expect(await main(["install-hook"])).toBe(0);
+      expect(await main(["doctor"])).toBe(0);
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = join(
+        root!,
+        "missing-codex",
+      );
+      expect(await main(["doctor"])).toBe(50);
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = "";
+      expect(await main(["doctor"])).toBe(50);
+      const cacheFile = join(root!, "cache-file");
+      await Bun.write(cacheFile, "not-a-directory");
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = paths.command;
+      process.env.CODEX_USAGE_GUARD_CACHE = cacheFile;
+      expect(await main(["doctor"])).toBe(50);
+      process.env.CODEX_USAGE_GUARD_CACHE = join(root!, "cache");
+      const stateDirectory = join(root!, "state-directory");
+      await mkdir(stateDirectory);
+      process.env.CODEX_USAGE_GUARD_STATE = stateDirectory;
+      expect(await main(["doctor"])).toBe(50);
+      process.env.CODEX_USAGE_GUARD_STATE = paths.state;
+      expect(await main(["uninstall-hook"])).toBe(0);
+      expect(await main(["uninstall"])).toBe(0);
 
-    await Bun.write(paths.config, 'active_profile = "work"\n');
-    expect(await main(["profile"])).toBe(30);
-    expect(await main(["profile", "auto"])).toBe(0);
-    expect(await main(["profile", "personal"])).toBe(0);
-  });
+      await Bun.write(paths.config, 'active_profile = "work"\n');
+      expect(await main(["profile"])).toBe(30);
+      expect(await main(["profile", "auto"])).toBe(0);
+      expect(await main(["profile", "personal"])).toBe(0);
+      expect(await main(["uninstall", "--purge"])).toBe(0);
+      expect(await Bun.file(paths.config).exists()).toBe(false);
+      expect(await Bun.file(paths.state).exists()).toBe(false);
+    }));
 
-  test("returns integration and argument errors with useful exit codes", async () => {
-    const paths = await setupCli();
-    const missingCommand = join(root!, "bin", "codex-missing");
-    await Bun.write(
-      missingCommand,
-      `#!/usr/bin/env bun
+  test("returns integration and argument errors with useful exit codes", () =>
+    withTestIsolation(envNames, async () => {
+      const paths = await setupCli();
+      const missingCommand = join(root!, "bin", "codex-missing");
+      await Bun.write(
+        missingCommand,
+        `#!/usr/bin/env bun
 console.log(JSON.stringify({ id: 1, result: {} }));
 console.log(JSON.stringify({ id: 2, result: {} }));
 `,
-    );
-    await chmod(missingCommand, 0o700);
-    process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = missingCommand;
-    await Bun.write(
-      paths.config,
-      `active_profile = "personal"
+      );
+      await chmod(missingCommand, 0o700);
+      process.env.CODEX_USAGE_GUARD_CODEX_COMMAND = missingCommand;
+      await Bun.write(
+        paths.config,
+        `active_profile = "personal"
 [data]
 fallback_to_session_files = false
 cache_ttl = "0s"
 missing_data_action = "warn"
 `,
-    );
-    expect(await main(["check", "--json"])).toBe(50);
-    expect(await main(["status"])).toBe(50);
-    expect(await run(["extend", "0"])).toBe(40);
-    expect(await run(["unknown-command"])).toBe(40);
-  });
+      );
+      expect(await main(["check", "--json"])).toBe(50);
+      expect(await main(["status"])).toBe(50);
+      expect(await run(["extend", "0"])).toBe(40);
+      expect(await run(["unknown-command"])).toBe(40);
+    }));
 });

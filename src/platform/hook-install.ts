@@ -158,20 +158,23 @@ export async function uninstallHook(): Promise<{
   if (!exists) return { path, changed: false };
   const command = installedHookCommand();
   const groups = value.hooks?.UserPromptSubmit ?? [];
+  let changed = false;
   const filtered = groups
     .map((group) => {
       const next: HookGroup = { ...group };
       if (group.hooks)
-        next.hooks = group.hooks.filter(
-          (handler) =>
-            handler.type !== "command" ||
-            (handler.command !== command &&
-              !handler.command.includes("--managed-by=codex-usage-guard")),
-        );
+        next.hooks = group.hooks.filter((handler) => {
+          const managed =
+            handler.type === "command" &&
+            (handler.command === command ||
+              handler.command.includes("--managed-by=codex-usage-guard"));
+          if (managed) changed = true;
+          return !managed;
+        });
       return next;
     })
     .filter((group) => (group.hooks?.length ?? 0) > 0);
-  if (filtered.length === groups.length) return { path, changed: false };
+  if (!changed) return { path, changed: false };
   const backupPath = await backupFile(path);
   const hooks = { ...(value.hooks ?? {}) };
   if (filtered.length) hooks.UserPromptSubmit = filtered;

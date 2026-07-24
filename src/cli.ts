@@ -13,6 +13,11 @@ import {
   installHook,
   uninstallHook,
 } from "./platform/hook-install.ts";
+import {
+  purgeData,
+  uninstallHomebrewFormula,
+  uninstallSelf,
+} from "./platform/uninstall.ts";
 import type { ActiveProfile, Decision } from "./domain/types.ts";
 
 const EXIT = {
@@ -32,7 +37,7 @@ function commandName(): "cug" | "codex-usage-guard" {
 
 function help(): string {
   const name = commandName();
-  return `${name} — local Codex quota pacing\n\nUsage:\n  ${name} status                         Show the current usage decision\n  ${name} check [--json]                 Check usage, optionally as JSON\n  ${name} extend [count]                  Temporarily increase the allowed lead\n  ${name} unlock [--until-reset]         Disable blocking until the quota resets\n  ${name} reset-overrides                Remove temporary extensions and unlocks\n  ${name} install-hook                   Install the Codex prompt hook\n  ${name} uninstall-hook                 Remove this application's prompt hook\n  ${name} doctor                         Check Codex integration and local setup\n  ${name} config-path                    Print the configuration file path\n  ${name} state-path                     Print the state database path\n  ${name} profile [auto|personal|work]   Show or set the active profile\n\nThe hidden 'hook' command is invoked by Codex's UserPromptSubmit hook.`;
+  return `${name} — local Codex quota pacing\n\nUsage:\n  ${name} status                         Show the current usage decision\n  ${name} check [--json]                 Check usage, optionally as JSON\n  ${name} extend [count]                  Temporarily increase the allowed lead\n  ${name} unlock [--until-reset]         Disable blocking until the quota resets\n  ${name} reset-overrides                Remove temporary extensions and unlocks\n  ${name} install-hook                   Install the Codex prompt hook\n  ${name} uninstall-hook                 Remove this application's prompt hook\n  ${name} uninstall [--purge]            Remove the installation and hook\n  ${name} doctor                         Check Codex integration and local setup\n  ${name} config-path                    Print the configuration file path\n  ${name} state-path                     Print the state database path\n  ${name} profile [auto|personal|work]   Show or set the active profile\n\nThe hidden 'hook' command is invoked by Codex's UserPromptSubmit hook.`;
 }
 async function withGuard<T>(
   fn: (
@@ -165,6 +170,66 @@ async function doctor(): Promise<number> {
   return checks.every((item) => item[1]) ? 0 : 50;
 }
 
+async function uninstall(args: string[]): Promise<number> {
+  const unknown = args.slice(1).filter((arg) => arg !== "--purge");
+  if (unknown.length)
+    throw new Error(
+      `uninstall accepts only --purge (received ${unknown.join(" ")})`,
+    );
+
+  const hook = await uninstallHook();
+  console.log(`${hook.changed ? "Removed" : "Not installed"}: ${hook.path}`);
+  if (hook.backup) console.log(`Backup: ${hook.backup}`);
+
+  const self = await uninstallSelf({
+    executablePath: process.execPath,
+    invokedPath: process.argv0 ?? process.argv[0],
+  });
+  if (self.homebrew) {
+    console.log(`Homebrew installation detected at ${self.executable}.`);
+  } else if (self.executable) {
+    console.log(`Removed: ${self.executable}`);
+    for (const alias of self.aliases) console.log(`Removed: ${alias}`);
+  } else {
+    console.log(
+      "Standalone executable not detected; no executable was removed.",
+    );
+  }
+
+  if (self.homebrew) {
+    try {
+      const result = await uninstallHomebrewFormula();
+      if (result.removed)
+        console.log(`Removed Homebrew formula via ${result.command}.`);
+      else {
+        console.error(
+          "Homebrew was not found. Run 'brew uninstall codex-usage-guard' manually.",
+        );
+        return EXIT.error;
+      }
+    } catch (error) {
+      console.error(
+        `${error instanceof Error ? error.message : String(error)}. Run 'brew uninstall codex-usage-guard' manually.`,
+      );
+      return EXIT.error;
+    }
+  }
+
+  const paths = resolvePaths();
+  if (args.includes("--purge")) {
+    const removed = await purgeData(paths);
+    if (removed.length) {
+      console.log("Removed application data:");
+      for (const path of removed) console.log(`  ${path}`);
+    } else console.log("No removable application data found.");
+  } else {
+    console.log(
+      "Application data was kept. Use --purge when running uninstall to delete it as well.",
+    );
+  }
+  return 0;
+}
+
 export async function main(
   args: string[],
   hookInput?: string,
@@ -206,6 +271,7 @@ export async function main(
     if (result.backup) console.log(`Backup: ${result.backup}`);
     return 0;
   }
+  if (command === "uninstall") return uninstall(args);
   if (command === "doctor") return doctor();
   if (command === "profile") {
     const selected = args[1];

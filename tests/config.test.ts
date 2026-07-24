@@ -19,6 +19,7 @@ import {
   setActiveProfile,
   type Paths,
 } from "../src/config/config.ts";
+import { withTestIsolation } from "./test-isolation.ts";
 
 let roots: string[] = [];
 const envNames = [
@@ -31,14 +32,8 @@ const envNames = [
   "XDG_STATE_HOME",
   "XDG_CACHE_HOME",
 ];
-const originalEnv = new Map(envNames.map((name) => [name, process.env[name]]));
 
 afterEach(async () => {
-  for (const name of envNames) {
-    const value = originalEnv.get(name);
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
-  }
   await Promise.all(
     roots.map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -58,8 +53,9 @@ async function tempPaths(): Promise<Paths> {
 }
 
 describe("configuration", () => {
-  test("parses the documented settings and resolves platform paths", () => {
-    const config = configFromToml(`
+  test("parses the documented settings and resolves platform paths", () =>
+    withTestIsolation(envNames, () => {
+      const config = configFromToml(`
 active_profile = "work"
 [personal]
 base_lead = "12h"
@@ -92,55 +88,58 @@ percentage_decimal_places = 3
 show_unlock_time = false
 show_daily_budget = false
 `);
-    expect(config.activeProfile).toBe("work");
-    expect(config.personal.baseLeadSeconds).toBe(43200);
-    expect(config.personal.warningAfterSeconds).toBe(1800);
-    expect(config.personal.extensionStepSeconds).toBe(172800);
-    expect(config.work.workdays).toEqual(["mon", "wed"]);
-    expect(config.work.warningAfterWorkdaysAhead).toBe(0.25);
-    expect(config.work.blockAfterWorkdaysAhead).toBe(2);
-    expect(config.overrides.warningDuringUnlock).toBe(false);
-    expect(config.data.fallbackToSessionFiles).toBe(false);
-    expect(config.data.cacheTtlSeconds).toBe(120);
-    expect(config.data.maximumStaleAgeSeconds).toBe(3600);
-    expect(config.data.appServerTimeoutSeconds).toBe(7);
-    expect(config.data.missingDataAction).toBe("block");
-    expect(config.resetDetection.confirmationReads).toBe(1);
-    expect(config.display.showUnlockTime).toBe(false);
-    expect(config.display.showDailyBudget).toBe(false);
+      expect(config.activeProfile).toBe("work");
+      expect(config.personal.baseLeadSeconds).toBe(43200);
+      expect(config.personal.warningAfterSeconds).toBe(1800);
+      expect(config.personal.extensionStepSeconds).toBe(172800);
+      expect(config.work.workdays).toEqual(["mon", "wed"]);
+      expect(config.work.warningAfterWorkdaysAhead).toBe(0.25);
+      expect(config.work.blockAfterWorkdaysAhead).toBe(2);
+      expect(config.overrides.warningDuringUnlock).toBe(false);
+      expect(config.data.fallbackToSessionFiles).toBe(false);
+      expect(config.data.cacheTtlSeconds).toBe(120);
+      expect(config.data.maximumStaleAgeSeconds).toBe(3600);
+      expect(config.data.appServerTimeoutSeconds).toBe(7);
+      expect(config.data.missingDataAction).toBe("block");
+      expect(config.resetDetection.confirmationReads).toBe(1);
+      expect(config.display.showUnlockTime).toBe(false);
+      expect(config.display.showDailyBudget).toBe(false);
 
-    const defaults = defaultConfig();
-    expect(defaults.activeProfile).toBe("auto");
-    expect(resolvePaths("darwin").config).toContain(
-      "Library/Application Support",
-    );
-    expect(resolvePaths("linux").config).toContain(".config");
-  });
+      const defaults = defaultConfig();
+      expect(defaults.activeProfile).toBe("auto");
+      expect(resolvePaths("darwin").config).toContain(
+        "Library/Application Support",
+      );
+      expect(resolvePaths("linux").config).toContain(".config");
+    }));
 
-  test("uses environment overrides and rejects malformed configuration", () => {
-    process.env.CODEX_USAGE_GUARD_CONFIG = "/synthetic/config.toml";
-    process.env.CODEX_USAGE_GUARD_STATE = "/synthetic/state.sqlite";
-    process.env.CODEX_USAGE_GUARD_CACHE = "/synthetic/cache";
-    process.env.CODEX_USAGE_GUARD_LOG = "/synthetic/logs";
-    process.env.CODEX_HOME = "/synthetic/codex";
-    const paths = resolvePaths("linux");
-    expect(paths).toEqual({
-      config: "/synthetic/config.toml",
-      state: "/synthetic/state.sqlite",
-      cache: "/synthetic/cache",
-      logs: "/synthetic/logs",
-      codexHome: "/synthetic/codex",
-    });
-    expect(() => configFromToml('active_profile = "invalid"')).toThrow();
-    expect(() => configFromToml('[personal]\nbase_lead = "bad"')).toThrow();
-    expect(() => configFromToml('[work]\ntimezone = "Invalid/Zone"')).toThrow();
-    expect(() =>
-      configFromToml('[data]\nmissing_data_action = "bad"'),
-    ).toThrow();
-    expect(configFromToml("unrecognized = bare-value").activeProfile).toBe(
-      "auto",
-    );
-  });
+  test("uses environment overrides and rejects malformed configuration", () =>
+    withTestIsolation(envNames, () => {
+      process.env.CODEX_USAGE_GUARD_CONFIG = "/synthetic/config.toml";
+      process.env.CODEX_USAGE_GUARD_STATE = "/synthetic/state.sqlite";
+      process.env.CODEX_USAGE_GUARD_CACHE = "/synthetic/cache";
+      process.env.CODEX_USAGE_GUARD_LOG = "/synthetic/logs";
+      process.env.CODEX_HOME = "/synthetic/codex";
+      const paths = resolvePaths("linux");
+      expect(paths).toEqual({
+        config: "/synthetic/config.toml",
+        state: "/synthetic/state.sqlite",
+        cache: "/synthetic/cache",
+        logs: "/synthetic/logs",
+        codexHome: "/synthetic/codex",
+      });
+      expect(() => configFromToml('active_profile = "invalid"')).toThrow();
+      expect(() => configFromToml('[personal]\nbase_lead = "bad"')).toThrow();
+      expect(() =>
+        configFromToml('[work]\ntimezone = "Invalid/Zone"'),
+      ).toThrow();
+      expect(() =>
+        configFromToml('[data]\nmissing_data_action = "bad"'),
+      ).toThrow();
+      expect(configFromToml("unrecognized = bare-value").activeProfile).toBe(
+        "auto",
+      );
+    }));
 
   test("loads, creates, and updates config files safely", async () => {
     const paths = await tempPaths();
