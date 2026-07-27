@@ -16,7 +16,6 @@ block_after_workdays_ahead = 1
 extension_step_workdays = 1
 
 [overrides]
-reset_on_quota_reset = true
 warning_during_unlock = true
 
 [data]

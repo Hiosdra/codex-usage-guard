@@ -68,7 +68,6 @@ warning_after_workdays_ahead = 0.25
 block_after_workdays_ahead = 2
 extension_step_workdays = 3
 [overrides]
-reset_on_quota_reset = false
 warning_during_unlock = false
 [data]
 fallback_to_session_files = false
