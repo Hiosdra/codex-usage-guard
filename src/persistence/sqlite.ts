@@ -23,6 +23,19 @@ export interface CacheEntry {
   observedAt: Date;
   source: string;
 }
+export interface RevertableReset {
+  id: number;
+  profile: Profile;
+  previousValue: string | null;
+  newValue: string;
+  resetsAt: string;
+  observedAt: string;
+  payload: string;
+}
+
+/** Archived overrides older than this are pruned; long enough to outlive any
+ * quota period, short enough that the table stays small. */
+const OVERRIDE_ARCHIVE_RETENTION_DAYS = 90;
 
 export class StateStore {
   readonly db: Database;
@@ -61,6 +74,21 @@ export class StateStore {
         CREATE TABLE IF NOT EXISTS limit_change_events (id INTEGER PRIMARY KEY AUTOINCREMENT, previous_limit TEXT NOT NULL, new_limit TEXT NOT NULL, resets_at TEXT NOT NULL, observed_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS cache_entries (key TEXT PRIMARY KEY, payload TEXT NOT NULL, observed_at TEXT NOT NULL, source TEXT NOT NULL);
         INSERT INTO schema_migrations(version) VALUES (1);
+      `);
+    }
+    if (version < 2) {
+      // ALTER TABLE has no IF NOT EXISTS, so the column is checked explicitly:
+      // a migration interrupted before its version row lands must still be
+      // replayable rather than failing every later open.
+      const hasRevertedAt = this.db
+        .query<{ name: string }, []>("PRAGMA table_info(reset_events)")
+        .all()
+        .some((column) => column.name === "reverted_at");
+      if (!hasRevertedAt)
+        this.db.exec("ALTER TABLE reset_events ADD COLUMN reverted_at TEXT;");
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS override_archive (profile TEXT NOT NULL, strategy TEXT NOT NULL, epoch_id TEXT NOT NULL, extension_seconds INTEGER NOT NULL DEFAULT 0, extension_workdays INTEGER NOT NULL DEFAULT 0, unlocked_until_reset INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, archived_at TEXT NOT NULL, PRIMARY KEY(profile, strategy, epoch_id));
+        INSERT INTO schema_migrations(version) VALUES (2);
       `);
     }
   }
@@ -141,10 +169,25 @@ export class StateStore {
           "SELECT epoch_id FROM overrides WHERE profile = ? AND strategy = ?",
         )
         .get(epoch.profile, epoch.strategy);
-      if (current && current.epoch_id !== epoch.epochId)
+      if (current && current.epoch_id !== epoch.epochId) {
+        // Overrides stay epoch-scoped, but the outgoing row is archived first so
+        // an epoch change later found to be spurious can be undone.
+        this.db
+          .query(
+            "INSERT OR REPLACE INTO override_archive(profile, strategy, epoch_id, extension_seconds, extension_workdays, unlocked_until_reset, updated_at, archived_at) SELECT profile, strategy, epoch_id, extension_seconds, extension_workdays, unlocked_until_reset, updated_at, ? FROM overrides WHERE profile = ? AND strategy = ? AND (extension_seconds != 0 OR extension_workdays != 0 OR unlocked_until_reset != 0)",
+          )
+          .run(new Date().toISOString(), epoch.profile, epoch.strategy);
         this.db
           .query("DELETE FROM overrides WHERE profile = ? AND strategy = ?")
           .run(epoch.profile, epoch.strategy);
+        this.db
+          .query("DELETE FROM override_archive WHERE archived_at < ?")
+          .run(
+            new Date(
+              Date.now() - OVERRIDE_ARCHIVE_RETENTION_DAYS * 86400 * 1000,
+            ).toISOString(),
+          );
+      }
       this.db
         .query(
           "INSERT OR IGNORE INTO overrides(profile, strategy, epoch_id, updated_at) VALUES (?, ?, ?, ?)",
@@ -298,6 +341,7 @@ export class StateStore {
     resetsAt: Date,
     method: string,
     payload: unknown,
+    observedAt = new Date(),
   ): void {
     this.db
       .query(
@@ -308,10 +352,78 @@ export class StateStore {
         previousValue ?? null,
         newValue,
         resetsAt.toISOString(),
-        new Date().toISOString(),
+        observedAt.toISOString(),
         method,
         JSON.stringify(payload),
       );
+  }
+  /** The most recent inferred early reset for this server period that has not
+   * yet been undone. */
+  revertableReset(
+    profile: Profile,
+    resetsAt: string,
+  ): RevertableReset | undefined {
+    return (
+      this.db
+        .query<RevertableReset, [string, string]>(
+          "SELECT id, profile, previous_value AS previousValue, new_value AS newValue, resets_at AS resetsAt, observed_at AS observedAt, payload FROM reset_events WHERE profile = ? AND resets_at = ? AND method = 'early_reset_inferred' AND reverted_at IS NULL ORDER BY id DESC LIMIT 1",
+        )
+        .get(profile, resetsAt) ?? undefined
+    );
+  }
+  markResetReverted(id: number, revertedAt: Date): void {
+    this.db
+      .query("UPDATE reset_events SET reverted_at = ? WHERE id = ?")
+      .run(revertedAt.toISOString(), id);
+  }
+  /** Moves an archived override back onto the given epoch. Returns the restored
+   * state, or undefined when nothing was archived for that epoch. */
+  restoreOverride(
+    profile: Profile,
+    strategy: QuotaSnapshot["strategy"],
+    epochId: string,
+  ): OverrideState | undefined {
+    let restored = false;
+    const tx = this.db.transaction(() => {
+      const archived = this.db
+        .query<
+          {
+            extension_seconds: number;
+            extension_workdays: number;
+            unlocked_until_reset: number;
+            updated_at: string;
+          },
+          [string, string, string]
+        >(
+          "SELECT extension_seconds, extension_workdays, unlocked_until_reset, updated_at FROM override_archive WHERE profile = ? AND strategy = ? AND epoch_id = ?",
+        )
+        .get(profile, strategy, epochId);
+      if (!archived) return;
+      const applied = this.db
+        .query(
+          "UPDATE overrides SET extension_seconds = ?, extension_workdays = ?, unlocked_until_reset = ?, updated_at = ? WHERE profile = ? AND strategy = ? AND epoch_id = ?",
+        )
+        .run(
+          archived.extension_seconds,
+          archived.extension_workdays,
+          archived.unlocked_until_reset,
+          archived.updated_at,
+          profile,
+          strategy,
+          epochId,
+        );
+      // Keep the archive intact when no epoch row was waiting for it, so the
+      // override is not lost to a caller that skipped ensureEpoch.
+      if (applied.changes !== 1) return;
+      this.db
+        .query(
+          "DELETE FROM override_archive WHERE profile = ? AND strategy = ? AND epoch_id = ?",
+        )
+        .run(profile, strategy, epochId);
+      restored = true;
+    });
+    tx();
+    return restored ? this.getOverride(profile, strategy, epochId) : undefined;
   }
   recordLimitChange(
     previousLimit: string,

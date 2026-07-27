@@ -32,6 +32,9 @@ weekly_used_percent_drop_threshold = "1.0"
 business_used_credits_drop_threshold = "1.0"
 confirmation_reads = 2
 confirmation_interval = "2s"
+# How long an inferred early reset stays undoable once usage returns to its
+# pre-reset level. Set to "0s" to make inferred resets final.
+revert_window = "24h"
 
 [display]
 timezone = "system"
