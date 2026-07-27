@@ -152,7 +152,26 @@ periods use the previous server reset as their start; the first observation
 subtracts one UTC calendar month rather than thirty fixed days. A sufficiently
 large usage drop with the same server reset can be confirmed as
 `early_reset_inferred`; the old server period end is retained while the local
-epoch and overrides are reset.
+epoch and overrides are reset. When a confirmation read denies the drop
+instead, that read replaces the one that raised the suspicion, so the rejected
+value is never the one evaluated or stored.
+
+An inferred early reset is provisional. A backend outage or an administrative
+change can zero reported usage against an unchanged period, which looks
+identical to a real early reset. If usage later returns to at least its
+pre-reset level while the server period end still has not moved, the inference
+is undone: the previous period start and epoch are restored, the overrides
+archived at the epoch change are put back, the original `reset_events` row is
+stamped with `reverted_at`, and an `early_reset_reverted` row is recorded. A
+real early reset restarts usage at zero, so it cannot regain a whole period's
+consumption inside `reset_detection.revert_window` (default 24 hours; `"0s"`
+makes inferred resets final). Past that window the inference stands.
+
+Without this, a spurious reset would be permanent for business periods: the
+next observation inherits the period start from the stored snapshot, so a
+period start moved into the middle of a month would survive until the real
+server reset, first blocking against a schedule that restarted from zero and
+then pacing the full monthly limit across the remaining days.
 
 ## Known limitations
 

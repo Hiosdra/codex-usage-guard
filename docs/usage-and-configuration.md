@@ -112,11 +112,21 @@ maximum_stale_age = "15m"
 app_server_timeout = "5s"
 missing_data_action = "warn"
 fallback_to_session_files = true
+
+[reset_detection]
+revert_window = "24h"
 ```
 
 `missing_data_action` can be `allow`, `warn`, or `block`. The default is
 `warn`. `warning_during_unlock` controls whether warnings continue during an
 unlock override.
+
+`revert_window` covers the case where the backend briefly reports zero usage
+against an unchanged quota period, which the guard would otherwise read as an
+early reset. Within that window, usage returning to at least its pre-reset
+level undoes the inference and restores both the previous period start and any
+`extend` or `unlock` override that the epoch change had cleared. Set it to
+`"0s"` to make inferred resets final.
 
 ## Files and environment overrides
 

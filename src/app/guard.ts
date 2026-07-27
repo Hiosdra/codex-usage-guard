@@ -1,7 +1,7 @@
 import { addUtcCalendarMonths } from "../domain/time.ts";
 import { Decimal } from "../domain/decimal.ts";
 import type { Config, Paths } from "../config/config.ts";
-import { StateStore } from "../persistence/sqlite.ts";
+import { StateStore, type RevertableReset } from "../persistence/sqlite.ts";
 import {
   CodexAppServerClient,
   AppServerError,
@@ -156,6 +156,10 @@ export class UsageGuard {
           const candidate =
             selection.active === "personal" ? fresh.personal : fresh.work;
           if (!candidate || !this.inferEarlyReset(previous, candidate)) {
+            // A read that rejects the reset is the more recent truth, so it
+            // replaces the reading that raised the suspicion instead of
+            // leaving that one to be evaluated and stored as fact.
+            if (candidate) prepared = this.prepareSnapshot(candidate);
             confirmed = false;
             break;
           }
@@ -172,6 +176,11 @@ export class UsageGuard {
         prepared.windowStart = data.observedAt;
       else prepared.periodStart = data.observedAt;
     }
+    const revert = early
+      ? undefined
+      : this.inferFalseReset(prepared, data.observedAt);
+    if (prepared.profile === "work" && revert?.periodStart)
+      prepared.periodStart = revert.periodStart;
     const epochId = this.makeEpochId(
       prepared,
       early ? data.observedAt : undefined,
@@ -187,10 +196,42 @@ export class UsageGuard {
       periodEnd: prepared.resetsAt,
       resetMethod: early
         ? "early_reset_inferred"
-        : previous && previous.resetsAt !== iso(prepared.resetsAt)
-          ? "server_reset"
-          : "server_observed",
+        : revert
+          ? "early_reset_reverted"
+          : previous && previous.resetsAt !== iso(prepared.resetsAt)
+            ? "server_reset"
+            : "server_observed",
     });
+    if (revert) {
+      this.state.markResetReverted(revert.event.id, data.observedAt);
+      const restored = this.state.restoreOverride(
+        prepared.profile,
+        prepared.strategy,
+        epochId,
+      );
+      this.state.recordReset(
+        prepared.profile,
+        revert.event.newValue,
+        prepared.profile === "personal"
+          ? prepared.usedPercent.toString()
+          : prepared.usedCredits.toString(),
+        prepared.resetsAt,
+        "early_reset_reverted",
+        {
+          revertedEventId: revert.event.id,
+          overridesRestored: Boolean(restored),
+          previous: previous?.payload ?? null,
+          current: payloadSnapshot(prepared),
+        },
+        data.observedAt,
+      );
+      this.logger.write("early_reset_reverted", {
+        profile: prepared.profile,
+        resetEventId: revert.event.id,
+        overridesRestored: Boolean(restored),
+        epoch: epochId,
+      });
+    }
     if (
       previous &&
       prepared.profile === "work" &&
@@ -218,6 +259,7 @@ export class UsageGuard {
           previous: previous?.payload ?? null,
           current: payloadSnapshot(prepared),
         },
+        data.observedAt,
       );
     this.state.insertSnapshot({
       profile: prepared.profile,
@@ -455,6 +497,57 @@ export class UsageGuard {
           this.config.resetDetection.businessUsedCreditsDropThreshold,
         );
     return false;
+  }
+
+  /** Detects that an earlier `early_reset_inferred` was an artefact of bad
+   * server data rather than a real reset: usage came back at or above its
+   * pre-reset level while the server period end never moved. A genuine reset
+   * restarts usage at zero, so regaining a whole period's consumption inside
+   * the revert window is not something a real reset can produce. */
+  private inferFalseReset(
+    current: QuotaSnapshot,
+    observedAt: Date,
+  ): { event: RevertableReset; periodStart?: Date } | undefined {
+    const window = this.config.resetDetection.revertWindowSeconds;
+    if (window <= 0) return undefined;
+    const event = this.state.revertableReset(
+      current.profile,
+      iso(current.resetsAt),
+    );
+    if (!event?.previousValue) return undefined;
+    const inferredAt = new Date(event.observedAt).getTime();
+    if (!Number.isFinite(inferredAt)) return undefined;
+    if ((observedAt.getTime() - inferredAt) / 1000 > window) return undefined;
+    try {
+      const value =
+        current.profile === "personal"
+          ? current.usedPercent
+          : current.usedCredits;
+      if (!value.greaterThanOrEqual(new Decimal(event.previousValue)))
+        return undefined;
+    } catch {
+      return undefined; /* an unreadable stored value never triggers a revert */
+    }
+    if (current.profile === "personal") return { event };
+    return { event, periodStart: this.restoredPeriodStart(event, current) };
+  }
+
+  /** The period start recorded before the spurious reset, falling back to the
+   * same calendar-month default a first observation would use. */
+  private restoredPeriodStart(
+    event: RevertableReset,
+    current: WorkCreditsSnapshot,
+  ): Date {
+    try {
+      const stored = JSON.parse(event.payload) as { previous?: string | null };
+      const snapshot = stored.previous
+        ? snapshotFromPayload(stored.previous)
+        : undefined;
+      if (snapshot?.profile === "work") return snapshot.periodStart;
+    } catch {
+      /* fall through to the calendar-month default */
+    }
+    return addUtcCalendarMonths(current.resetsAt, -1);
   }
 
   private makeEpochId(snapshot: QuotaSnapshot, observedStart?: Date): string {

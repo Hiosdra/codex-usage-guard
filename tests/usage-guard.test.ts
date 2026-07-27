@@ -160,6 +160,221 @@ describe("UsageGuard", () => {
     }
   });
 
+  test("adopts the rejecting read when a confirmation denies an early reset", async () => {
+    const paths = await makePaths();
+    const state = new StateStore(paths.state);
+    // The last entry repeats, so the queue drives one read per call.
+    let queue = ["420.5"];
+    const current = clone(workFixture);
+    let now = new Date("2026-09-21T09:00:00Z");
+    try {
+      const config = defaultConfig();
+      config.work.timezone = "UTC";
+      config.data.cacheTtlSeconds = 0;
+      config.resetDetection.confirmationReads = 2;
+      config.resetDetection.confirmationIntervalSeconds = 0.001;
+      const guard = new UsageGuard(
+        config,
+        paths,
+        state,
+        client(async () => {
+          current.result.rateLimits.individualLimit.used =
+            queue.length > 1 ? queue.shift()! : queue[0]!;
+          return clone(current);
+        }),
+        () => now,
+      );
+      await guard.evaluate();
+
+      // The suspicious zero is denied by the confirmation read.
+      now = new Date(now.getTime() + 60_000);
+      queue = ["0", "430"];
+      const denied = await guard.evaluate();
+      if (denied.result?.profile === "work") {
+        expect(denied.result.usedCredits.toString()).toBe("430");
+        expect(denied.result.periodStart.toISOString()).toBe(
+          "2026-09-01T00:00:00.000Z",
+        );
+      }
+      // The denied reading must not be stored or recorded as a reset.
+      expect(state.latestSnapshot("work")?.usedValue).toBe("430");
+      expect(
+        state.db.query("SELECT COUNT(*) AS count FROM reset_events").get(),
+      ).toEqual({ count: 0 });
+    } finally {
+      state.db.close();
+    }
+  });
+
+  test("reverts a spurious personal reset and restores the unlock", async () => {
+    const paths = await makePaths();
+    const state = new StateStore(paths.state);
+    const current = clone(personalFixture);
+    current.result.rateLimits.secondary.usedPercent = 80;
+    let now = new Date("2026-09-21T09:00:00Z");
+    try {
+      const config = defaultConfig();
+      config.data.cacheTtlSeconds = 0;
+      config.resetDetection.confirmationReads = 1;
+      const guard = new UsageGuard(
+        config,
+        paths,
+        state,
+        client(async () => current),
+        () => now,
+      );
+      const before = await guard.evaluate();
+      await guard.unlock();
+      const epochId = before.result?.epochId;
+
+      now = new Date(now.getTime() + 60_000);
+      current.result.rateLimits.secondary.usedPercent = 5;
+      const during = await guard.evaluate();
+      expect(during.result?.unlockedUntilReset).toBe(false);
+      expect(during.result?.epochId).not.toBe(epochId);
+
+      now = new Date(now.getTime() + 3_600_000);
+      current.result.rateLimits.secondary.usedPercent = 80;
+      const after = await guard.evaluate();
+      expect(after.result?.epochId).toBe(epochId);
+      expect(after.result?.unlockedUntilReset).toBe(true);
+      expect(
+        state.db
+          .query(
+            "SELECT COUNT(*) AS count FROM reset_events WHERE method = 'early_reset_reverted'",
+          )
+          .get(),
+      ).toEqual({ count: 1 });
+    } finally {
+      state.db.close();
+    }
+  });
+
+  test("reverts a spurious work reset and restores the archived overrides", async () => {
+    const paths = await makePaths();
+    const state = new StateStore(paths.state);
+    const current = clone(workFixture);
+    let now = new Date("2026-09-21T09:00:00Z");
+    try {
+      const config = defaultConfig();
+      config.work.timezone = "UTC";
+      config.data.cacheTtlSeconds = 0;
+      config.resetDetection.confirmationReads = 1;
+      const guard = new UsageGuard(
+        config,
+        paths,
+        state,
+        client(async () => current),
+        () => now,
+      );
+      const before = await guard.evaluate();
+      await guard.unlock();
+      await guard.extend(2);
+      const periodStart =
+        before.result?.profile === "work"
+          ? before.result.periodStart.toISOString()
+          : "";
+      expect(periodStart).toBe("2026-09-01T00:00:00.000Z");
+
+      // The backend briefly reports zero usage against an unchanged period.
+      now = new Date(now.getTime() + 60_000);
+      current.result.rateLimits.individualLimit.used = "0";
+      const during = await guard.evaluate();
+      expect(during.result?.unlockedUntilReset).toBe(false);
+      if (during.result?.profile === "work")
+        expect(during.result.periodStart.toISOString()).toBe(now.toISOString());
+
+      // Usage comes back at its pre-reset level, so the reset was never real.
+      now = new Date(now.getTime() + 3_600_000);
+      current.result.rateLimits.individualLimit.used = "430";
+      const after = await guard.evaluate();
+      expect(after.result?.profile).toBe("work");
+      if (after.result?.profile === "work") {
+        expect(after.result.periodStart.toISOString()).toBe(periodStart);
+        expect(after.result.totalWorkdays).toBe(22);
+        expect(after.result.decision).toBe("allow");
+        expect(after.result.temporaryExtensionWorkdays).toBe(2);
+      }
+      expect(after.result?.unlockedUntilReset).toBe(true);
+      expect(
+        state.db
+          .query(
+            "SELECT COUNT(*) AS count FROM reset_events WHERE method = 'early_reset_reverted'",
+          )
+          .get(),
+      ).toEqual({ count: 1 });
+      expect(
+        state.db
+          .query(
+            "SELECT COUNT(*) AS count FROM reset_events WHERE method = 'early_reset_inferred' AND reverted_at IS NULL",
+          )
+          .get(),
+      ).toEqual({ count: 0 });
+
+      // A later observation must not revert a second time.
+      now = new Date(now.getTime() + 60_000);
+      const stable = await guard.evaluate();
+      if (stable.result?.profile === "work")
+        expect(stable.result.periodStart.toISOString()).toBe(periodStart);
+      expect(
+        state.db
+          .query(
+            "SELECT COUNT(*) AS count FROM reset_events WHERE method = 'early_reset_reverted'",
+          )
+          .get(),
+      ).toEqual({ count: 1 });
+    } finally {
+      state.db.close();
+    }
+  });
+
+  test("keeps a real early reset when usage stays below its pre-reset level", async () => {
+    const paths = await makePaths();
+    const state = new StateStore(paths.state);
+    const current = clone(workFixture);
+    let now = new Date("2026-09-21T09:00:00Z");
+    try {
+      const config = defaultConfig();
+      config.work.timezone = "UTC";
+      config.data.cacheTtlSeconds = 0;
+      config.resetDetection.confirmationReads = 1;
+      const guard = new UsageGuard(
+        config,
+        paths,
+        state,
+        client(async () => current),
+        () => now,
+      );
+      await guard.evaluate();
+      await guard.unlock();
+
+      now = new Date(now.getTime() + 60_000);
+      current.result.rateLimits.individualLimit.used = "0";
+      await guard.evaluate();
+
+      // Usage grows again but never reaches the pre-reset 420.5.
+      now = new Date(now.getTime() + 3_600_000);
+      current.result.rateLimits.individualLimit.used = "120";
+      const after = await guard.evaluate();
+      if (after.result?.profile === "work")
+        expect(after.result.periodStart.toISOString()).toBe(
+          "2026-09-21T09:01:00.000Z",
+        );
+      expect(after.result?.unlockedUntilReset).toBe(false);
+
+      // Past the revert window the reset is final even if usage catches up.
+      now = new Date(now.getTime() + 2 * 86_400_000);
+      current.result.rateLimits.individualLimit.used = "500";
+      const late = await guard.evaluate();
+      if (late.result?.profile === "work")
+        expect(late.result.periodStart.toISOString()).toBe(
+          "2026-09-21T09:01:00.000Z",
+        );
+    } finally {
+      state.db.close();
+    }
+  });
+
   test("uses fallback session data and stale cache when App Server fails", async () => {
     const paths = await makePaths();
     const state = new StateStore(paths.state);

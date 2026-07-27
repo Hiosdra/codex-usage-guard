@@ -1,8 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StateStore } from "../src/persistence/sqlite.ts";
+
+/** The schema exactly as version 1 shipped it, to migrate forward from. */
+function writeVersion1Database(path: string): void {
+  const db = new Database(path);
+  db.exec(`
+    CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY);
+    CREATE TABLE reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, profile TEXT NOT NULL, previous_value TEXT, new_value TEXT, resets_at TEXT NOT NULL, observed_at TEXT NOT NULL, method TEXT NOT NULL, payload TEXT NOT NULL);
+    CREATE TABLE overrides (profile TEXT NOT NULL, strategy TEXT NOT NULL, epoch_id TEXT NOT NULL, extension_seconds INTEGER NOT NULL DEFAULT 0, extension_workdays INTEGER NOT NULL DEFAULT 0, unlocked_until_reset INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, PRIMARY KEY(profile, strategy));
+    INSERT INTO reset_events(profile, previous_value, new_value, resets_at, observed_at, method, payload) VALUES ('work', '420.5', '0', '2026-10-01T00:00:00.000Z', '2026-09-21T09:01:00.000Z', 'early_reset_inferred', '{}');
+    INSERT INTO schema_migrations(version) VALUES (1);
+  `);
+  db.close();
+}
 
 describe("SQLite repositories", () => {
   test("stores snapshots, cache entries, resets, and limit changes", async () => {
@@ -145,6 +159,123 @@ describe("SQLite repositories", () => {
       ).toThrow();
     } finally {
       store.db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("archives overrides on an epoch change and restores them on revert", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cug-sqlite-revert-"));
+    const store = new StateStore(join(root, "state.sqlite"));
+    const epoch = (epochId: string) => ({
+      epochId,
+      profile: "work" as const,
+      strategy: "monthly_ai_credits_workdays" as const,
+      periodStart: new Date("2026-09-01T00:00:00Z"),
+      periodEnd: new Date("2026-10-01T00:00:00Z"),
+      resetMethod: "server_observed",
+    });
+    try {
+      store.ensureEpoch(epoch("a"));
+      store.setUnlocked("work", "monthly_ai_credits_workdays", "a", true);
+      store.updateExtension("work", "monthly_ai_credits_workdays", "a", 0, 2);
+
+      store.ensureEpoch(epoch("b"));
+      expect(
+        store.getOverride("work", "monthly_ai_credits_workdays", "b"),
+      ).toMatchObject({
+        unlockedUntilReset: false,
+        temporaryExtensionWorkdays: 0,
+      });
+
+      store.ensureEpoch(epoch("a"));
+      expect(
+        store.restoreOverride("work", "monthly_ai_credits_workdays", "a"),
+      ).toMatchObject({
+        unlockedUntilReset: true,
+        temporaryExtensionWorkdays: 2,
+      });
+      // The archive entry is consumed, so a second revert finds nothing.
+      expect(
+        store.restoreOverride("work", "monthly_ai_credits_workdays", "a"),
+      ).toBeUndefined();
+    } finally {
+      store.db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("finds and marks a revertable inferred reset", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cug-sqlite-events-"));
+    const store = new StateStore(join(root, "state.sqlite"));
+    const resetsAt = new Date("2026-10-01T00:00:00Z");
+    try {
+      store.recordReset("work", "420.5", "0", resetsAt, "server_reset", {});
+      expect(
+        store.revertableReset("work", resetsAt.toISOString()),
+      ).toBeUndefined();
+
+      store.recordReset(
+        "work",
+        "420.5",
+        "0",
+        resetsAt,
+        "early_reset_inferred",
+        {},
+        new Date("2026-09-21T09:01:00Z"),
+      );
+      const event = store.revertableReset("work", resetsAt.toISOString());
+      expect(event).toMatchObject({
+        previousValue: "420.5",
+        observedAt: "2026-09-21T09:01:00.000Z",
+      });
+
+      store.markResetReverted(event!.id, new Date("2026-09-21T10:01:00Z"));
+      expect(
+        store.revertableReset("work", resetsAt.toISOString()),
+      ).toBeUndefined();
+    } finally {
+      store.db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("migrates a version 1 database and stays replayable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cug-sqlite-migrate-"));
+    const path = join(root, "state.sqlite");
+    try {
+      writeVersion1Database(path);
+      const store = new StateStore(path);
+      expect(
+        store.db
+          .query("SELECT MAX(version) AS version FROM schema_migrations")
+          .get(),
+      ).toEqual({ version: 2 });
+      // Existing rows survive and become visible through the new column.
+      expect(
+        store.revertableReset("work", "2026-10-01T00:00:00.000Z"),
+      ).toMatchObject({ previousValue: "420.5" });
+      store.db.close();
+
+      // Reopening is a no-op rather than a second ALTER.
+      const reopened = new StateStore(path);
+      expect(
+        reopened.db.query("SELECT COUNT(*) AS count FROM reset_events").get(),
+      ).toEqual({ count: 1 });
+      reopened.db.close();
+
+      // A migration interrupted after the ALTER but before its version row
+      // must still replay instead of failing every later open.
+      const interrupted = new Database(path);
+      interrupted.exec("DELETE FROM schema_migrations WHERE version = 2");
+      interrupted.close();
+      const replayed = new StateStore(path);
+      expect(
+        replayed.db
+          .query("SELECT MAX(version) AS version FROM schema_migrations")
+          .get(),
+      ).toEqual({ version: 2 });
+      replayed.db.close();
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });

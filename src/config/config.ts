@@ -40,6 +40,7 @@ export interface Config {
     businessUsedCreditsDropThreshold: Decimal;
     confirmationReads: number;
     confirmationIntervalSeconds: number;
+    revertWindowSeconds: number;
   };
   display: {
     timezone: string;
@@ -229,6 +230,7 @@ export function defaultConfig(): Config {
       businessUsedCreditsDropThreshold: new Decimal("1.0"),
       confirmationReads: 2,
       confirmationIntervalSeconds: 2,
+      revertWindowSeconds: 86400,
     },
     display: {
       timezone: systemZone,
@@ -381,6 +383,10 @@ export function configFromToml(text: string): Config {
       confirmationIntervalSeconds: parseDuration(
         stringValue(root, "reset_detection", "confirmation_interval", "2s"),
         "reset_detection.confirmation_interval",
+      ),
+      revertWindowSeconds: parseDuration(
+        stringValue(root, "reset_detection", "revert_window", "24h"),
+        "reset_detection.revert_window",
       ),
     },
     display: {

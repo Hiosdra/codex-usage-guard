@@ -81,6 +81,7 @@ weekly_used_percent_drop_threshold = "2.5"
 business_used_credits_drop_threshold = "3.5"
 confirmation_reads = 0
 confirmation_interval = "0s"
+revert_window = "6h"
 [display]
 timezone = "UTC"
 credit_decimal_places = 4
@@ -102,6 +103,8 @@ show_daily_budget = false
       expect(config.data.appServerTimeoutSeconds).toBe(7);
       expect(config.data.missingDataAction).toBe("block");
       expect(config.resetDetection.confirmationReads).toBe(1);
+      expect(config.resetDetection.revertWindowSeconds).toBe(21600);
+      expect(defaultConfig().resetDetection.revertWindowSeconds).toBe(86400);
       expect(config.display.showUnlockTime).toBe(false);
       expect(config.display.showDailyBudget).toBe(false);
 
