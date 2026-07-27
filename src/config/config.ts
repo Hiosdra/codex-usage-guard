@@ -26,7 +26,7 @@ export interface Config {
     blockAfterWorkdaysAhead: number;
     extensionStepWorkdays: number;
   };
-  overrides: { resetOnQuotaReset: boolean; warningDuringUnlock: boolean };
+  overrides: { warningDuringUnlock: boolean };
   data: {
     source: "codex_app_server";
     fallbackToSessionFiles: boolean;
@@ -216,7 +216,7 @@ export function defaultConfig(): Config {
       blockAfterWorkdaysAhead: 1,
       extensionStepWorkdays: 1,
     },
-    overrides: { resetOnQuotaReset: true, warningDuringUnlock: true },
+    overrides: { warningDuringUnlock: true },
     data: {
       source: "codex_app_server",
       fallbackToSessionFiles: true,
@@ -322,12 +322,6 @@ export function configFromToml(text: string): Config {
       ),
     },
     overrides: {
-      resetOnQuotaReset: boolValue(
-        root,
-        "overrides",
-        "reset_on_quota_reset",
-        true,
-      ),
       warningDuringUnlock: boolValue(
         root,
         "overrides",

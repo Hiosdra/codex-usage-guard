@@ -121,6 +121,12 @@ revert_window = "24h"
 `warn`. `warning_during_unlock` controls whether warnings continue during an
 unlock override.
 
+Overrides are always scoped to the quota epoch they were created in. Extensions
+and `unlock --until-reset` are dropped when the quota resets, and this is not
+configurable. The `revert_window` restore below is not an exception: it revives
+the original epoch after concluding that the reset never happened, rather than
+carrying an override across one.
+
 `revert_window` covers the case where the backend briefly reports zero usage
 against an unchanged quota period, which the guard would otherwise read as an
 early reset. Within that window, usage returning to at least its pre-reset
