@@ -122,6 +122,37 @@ describe("UsageGuard", () => {
     }
   });
 
+  test("keeps the first UTC workday in the configured local timezone", async () => {
+    const paths = await makePaths();
+    const state = new StateStore(paths.state);
+    const current = clone(workFixture);
+    current.result.rateLimits.individualLimit.used = "180";
+    try {
+      const config = defaultConfig();
+      config.work.timezone = "Europe/Warsaw";
+      config.data.cacheTtlSeconds = 0;
+      const guard = new UsageGuard(
+        config,
+        paths,
+        state,
+        client(async () => current),
+        () => new Date("2026-09-03T12:00:00Z"),
+      );
+      const result = await guard.evaluate();
+      expect(result.result?.profile).toBe("work");
+      if (result.result?.profile === "work") {
+        expect(result.result.periodStart.toISOString()).toBe(
+          "2026-09-01T00:00:00.000Z",
+        );
+        expect(result.result.totalWorkdays).toBe(22);
+        expect(result.result.startedWorkdays).toBe(3);
+        expect(result.result.decision).toBe("warn");
+      }
+    } finally {
+      state.db.close();
+    }
+  });
+
   test("confirms an early personal reset and records the event", async () => {
     const paths = await makePaths();
     const state = new StateStore(paths.state);
