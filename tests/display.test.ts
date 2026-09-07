@@ -64,7 +64,7 @@ function workResult() {
     usedCredits: new Decimal("420.5"),
     remainingPercent: new Decimal("58"),
     resetsAt: new Date("2026-11-01T00:00:00Z"),
-    periodStart: new Date("2026-09-30T22:00:00Z"),
+    periodStart: new Date("2026-10-01T00:00:00Z"),
     observedAt: new Date("2026-10-07T12:00:00Z"),
     serverLimitReached: false,
     unlimited: false,

@@ -69,7 +69,13 @@ ahead_workdays = ahead_credits / daily_budget
 ```
 
 The full daily budget becomes available at local midnight. Weekends do not add
-budget, and public or company holidays are not modelled.
+budget, and public or company holidays are not modelled. The UTC calendar dates
+containing `periodStart` up to (but excluding) the date containing `resetsAt`
+define the workday set.
+When local midnight for the first date precedes the UTC period start, its full
+budget becomes usable when the quota period opens. The UTC reset date is never
+borrowed into the current period. A period that starts in the middle of the
+month keeps the existing partial-day rule and begins at the next local release.
 
 On the first read, the period starts one UTC calendar month before `resetsAt`.
 Later reads use the previously observed server reset. A limit change without a

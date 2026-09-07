@@ -1,7 +1,7 @@
 import { Decimal } from "../domain/decimal.ts";
 import {
-  nextWorkdayMidnight,
-  workdayMidnightsBetween,
+  addUtcCalendarMonths,
+  workdayMidnightsInUtcDateRange,
 } from "../domain/time.ts";
 import type {
   OverrideState,
@@ -29,11 +29,19 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
   evaluate(input: WorkdayPacingInput): WorkdayPacingResult {
     const { snapshot, override } = input;
     const workdays = input.workdays ?? [1, 2, 3, 4, 5];
-    const allReleases = workdayMidnightsBetween(
+    // The quota period is defined by UTC calendar dates. Releases happen at
+    // local midnight, so release instants can cross the UTC period boundary.
+    // Only a normal month boundary includes a partial first workday; an
+    // inferred mid-month reset retains the strict partial-day behavior.
+    const includePartialStartDate =
+      addUtcCalendarMonths(snapshot.resetsAt, -1).getTime() ===
+      snapshot.periodStart.getTime();
+    const allReleases = workdayMidnightsInUtcDateRange(
       snapshot.periodStart,
       snapshot.resetsAt,
       input.timezone,
       workdays,
+      includePartialStartDate,
     );
     const startedReleases = allReleases.filter(
       (release) => release.getTime() <= input.now.getTime(),
@@ -127,18 +135,19 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
       result.decision = "block";
       result.reason =
         "AI Credits usage is at or beyond the configured allowed workday lead.";
-      let candidate = allReleases.find(
+      const firstCandidate = allReleases.findIndex(
         (release) =>
           release.getTime() > input.now.getTime() &&
           release.getTime() >= snapshot.periodStart.getTime(),
       );
-      while (candidate) {
+      for (
+        let candidateIndex = firstCandidate;
+        candidateIndex >= 0;
+        candidateIndex += 1
+      ) {
+        const candidate = allReleases[candidateIndex]!;
         const scheduledAtCandidate = snapshot.limitCredits
-          .times(
-            allReleases.filter(
-              (release) => release.getTime() <= candidate!.getTime(),
-            ).length,
-          )
+          .times(candidateIndex + 1)
           .div(totalWorkdays);
         const allowedAtCandidate = scheduledAtCandidate.plus(
           dailyBudget.times(effectiveLeadWorkdays),
@@ -148,12 +157,6 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
           result.estimatedUnlock = candidate;
           break;
         }
-        candidate = nextWorkdayMidnight(
-          candidate,
-          snapshot.resetsAt,
-          input.timezone,
-          workdays,
-        );
       }
       if (!result.estimatedUnlock) result.estimatedUnlock = snapshot.resetsAt;
     }

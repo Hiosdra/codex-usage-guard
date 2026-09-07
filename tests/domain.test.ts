@@ -13,6 +13,7 @@ import {
   validateTimeZone,
   weekday,
   workdayMidnightsBetween,
+  workdayMidnightsInUtcDateRange,
 } from "../src/domain/time.ts";
 import { WeeklyPercentagePacingStrategy } from "../src/strategies/weekly-percentage.ts";
 import { MonthlyAiCreditsWorkdaysStrategy } from "../src/strategies/monthly-workdays-credits.ts";
@@ -55,7 +56,7 @@ const weekly = (
 };
 const work = (
   used: string,
-  start = "2026-09-30T22:00:00Z",
+  start = "2026-10-01T00:00:00Z",
   end = "2026-11-01T00:00:00Z",
 ): WorkCreditsSnapshot => ({
   profile: "work",
@@ -231,6 +232,70 @@ describe("monthly workday strategy", () => {
     expect(monday.startedWorkdays).toBe(3);
     expect(saturday.decision).toBe("warn");
   });
+  test("keeps UTC month boundaries across timezone offsets", () => {
+    const evaluate = (
+      used: string,
+      now: string,
+      timezone: string,
+      limit = "1000",
+    ) => {
+      const snapshot = work(
+        used,
+        "2026-09-01T00:00:00Z",
+        "2026-10-01T00:00:00Z",
+      );
+      snapshot.limitCredits = new Decimal(limit);
+      return strategy.evaluate({
+        snapshot,
+        override: noOverride("work", "monthly_ai_credits_workdays"),
+        now: new Date(now),
+        timezone,
+        baseLeadWorkdays: 1,
+        warningAfterWorkdaysAhead: 0,
+        epochId: "synthetic",
+      });
+    };
+
+    for (const timezone of ["Europe/Warsaw", "America/New_York"]) {
+      const firstDay = evaluate(
+        "300",
+        "2026-09-01T12:00:00Z",
+        timezone,
+        "5000",
+      );
+      expect(firstDay.totalWorkdays).toBe(22);
+      expect(firstDay.startedWorkdays).toBe(1);
+      expect(firstDay.decision).toBe("warn");
+
+      const thirdDay = evaluate(
+        "517.28",
+        "2026-09-03T12:00:00Z",
+        timezone,
+        "5000",
+      );
+      expect(thirdDay.totalWorkdays).toBe(22);
+      expect(thirdDay.startedWorkdays).toBe(3);
+      expect(thirdDay.scheduledCredits.toString()).toBe(
+        "681.8181818181818181818181818181818181818182",
+      );
+      expect(thirdDay.aheadWorkdays.toFixed(2)).toBe("-0.72");
+      expect(thirdDay.decision).toBe("allow");
+    }
+  });
+  test("does not turn an early-reset partial day into a full budget day", () => {
+    const result = strategy.evaluate({
+      snapshot: work("100", "2026-09-21T09:00:00Z", "2026-10-01T00:00:00Z"),
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      now: new Date("2026-09-21T12:00:00Z"),
+      timezone: "Europe/Warsaw",
+      baseLeadWorkdays: 1,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    });
+    expect(result.totalWorkdays).toBe(7);
+    expect(result.startedWorkdays).toBe(0);
+    expect(result.decision).toBe("warn");
+  });
   test("blocks at one workday ahead and unlocks on the next release", () => {
     const result = strategy.evaluate({
       snapshot: work("200"),
@@ -296,6 +361,16 @@ describe("calendar arithmetic", () => {
         "Europe/Warsaw",
       ).toISOString(),
     ).toBe("2026-10-04T22:00:00.000Z");
+  });
+  test("maps UTC quota dates to local release midnights", () => {
+    const start = new Date("2026-09-01T00:00:00Z");
+    const end = new Date("2026-10-01T00:00:00Z");
+    for (const timezone of ["Europe/Warsaw", "America/New_York"]) {
+      const releases = workdayMidnightsInUtcDateRange(start, end, timezone);
+      expect(releases).toHaveLength(22);
+      expect(releases[0]!.getTime()).toBeGreaterThanOrEqual(start.getTime());
+      expect(releases.at(-1)!.getTime()).toBeLessThan(end.getTime());
+    }
   });
   test("tracks both DST transitions at local midnight", () => {
     expect(

@@ -144,6 +144,45 @@ export function workdayMidnightsBetween(
   return result;
 }
 
+/**
+ * Return local-midnight releases for the UTC calendar dates in a quota
+ * period. The start date is included and the end date is excluded. If the
+ * first local midnight predates the period start, that release is moved to
+ * the period start unless partial start dates are disabled, in which case the
+ * workday is skipped.
+ */
+export function workdayMidnightsInUtcDateRange(
+  start: Date,
+  end: Date,
+  timeZone: string,
+  allowedWeekdays = [1, 2, 3, 4, 5],
+  includePartialStartDate = true,
+): Date[] {
+  let date: CivilDate = {
+    year: start.getUTCFullYear(),
+    month: start.getUTCMonth() + 1,
+    day: start.getUTCDate(),
+  };
+  const endDate: CivilDate = {
+    year: end.getUTCFullYear(),
+    month: end.getUTCMonth() + 1,
+    day: end.getUTCDate(),
+  };
+  const endDateKey = civilDateKey(endDate);
+  const startTime = start.getTime();
+  const result: Date[] = [];
+  for (let guard = 0; guard < 5000; guard += 1) {
+    if (civilDateKey(date) >= endDateKey) break;
+    if (allowedWeekdays.includes(weekday(date))) {
+      const release = localMidnight(date, timeZone);
+      if (release.getTime() >= startTime || includePartialStartDate)
+        result.push(release.getTime() < startTime ? start : release);
+    }
+    date = addCivilDays(date, 1);
+  }
+  return result;
+}
+
 export function nextWorkdayMidnight(
   after: Date,
   end: Date,
