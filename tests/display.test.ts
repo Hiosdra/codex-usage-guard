@@ -96,6 +96,7 @@ describe("display", () => {
       usedCredits: "420.5",
       remainingCredits: "579.5",
       remainingPercent: "58",
+      quotaUsageToDatePercent: "185.02",
     });
     expect(warningMessage(personal, defaultConfig())).toContain(
       "Codex weekly usage warning",
@@ -149,6 +150,19 @@ describe("display", () => {
         config,
       ),
     ).toContain("Daily budget");
+    expect(
+      statusText(
+        {
+          result: work,
+          profile: "work",
+          profileReason: "synthetic",
+          dataSource: "fixture",
+          stale: false,
+          observedAt: work.periodStart,
+        },
+        config,
+      ),
+    ).toContain("Percent of quota usage to date: 185.0%");
     config.display.showDailyBudget = false;
     expect(
       statusText(

@@ -282,6 +282,27 @@ describe("monthly workday strategy", () => {
       expect(thirdDay.decision).toBe("allow");
     }
   });
+  test("reports usage as a percentage of the quota scheduled to date", () => {
+    const snapshot = work(
+      "500",
+      "2026-09-01T00:00:00Z",
+      "2026-10-01T00:00:00Z",
+    );
+    snapshot.limitCredits = new Decimal("3000");
+    const result = strategy.evaluate({
+      snapshot,
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      now: new Date("2026-09-10T12:00:00Z"),
+      timezone: "Europe/Warsaw",
+      baseLeadWorkdays: 1,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    });
+    expect(result.totalWorkdays).toBe(22);
+    expect(result.startedWorkdays).toBe(8);
+    expect(result.scheduledCredits.toFixed(1)).toBe("1090.9");
+    expect(result.quotaUsageToDatePercent?.toFixed(1)).toBe("45.8");
+  });
   test("does not turn an early-reset partial day into a full budget day", () => {
     const result = strategy.evaluate({
       snapshot: work("100", "2026-09-21T09:00:00Z", "2026-10-01T00:00:00Z"),
@@ -294,6 +315,7 @@ describe("monthly workday strategy", () => {
     });
     expect(result.totalWorkdays).toBe(7);
     expect(result.startedWorkdays).toBe(0);
+    expect(result.quotaUsageToDatePercent).toBeUndefined();
     expect(result.decision).toBe("warn");
   });
   test("blocks at one workday ahead and unlocks on the next release", () => {
@@ -324,6 +346,7 @@ describe("monthly workday strategy", () => {
     });
     expect(result.decision).toBe("allow");
     expect(result.unlimited).toBe(true);
+    expect(result.quotaUsageToDatePercent).toBeUndefined();
   });
   test("blocks when Codex reports the server-side credit limit", () => {
     const result = strategy.evaluate({

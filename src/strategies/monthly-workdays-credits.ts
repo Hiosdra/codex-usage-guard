@@ -87,6 +87,9 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
     const scheduledCredits = snapshot.limitCredits
       .times(startedWorkdays)
       .div(totalWorkdays);
+    const quotaUsageToDatePercent = scheduledCredits.isZero()
+      ? undefined
+      : snapshot.usedCredits.times(100).div(scheduledCredits);
     const aheadCredits = snapshot.usedCredits.minus(scheduledCredits);
     const aheadWorkdays = aheadCredits.div(dailyBudget);
     const effectiveLeadWorkdays =
@@ -99,6 +102,9 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
         ? { remainingPercent: snapshot.remainingPercent }
         : {}),
       scheduledCredits,
+      ...(quotaUsageToDatePercent !== undefined
+        ? { quotaUsageToDatePercent }
+        : {}),
       aheadCredits,
       aheadWorkdays,
       totalWorkdays,
