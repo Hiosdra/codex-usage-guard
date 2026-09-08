@@ -61,6 +61,9 @@ export function resultJson(result: PacingResult): Record<string, unknown> {
       ? { remainingPercent: result.remainingPercent.toString() }
       : {}),
     scheduledCredits: result.scheduledCredits.toString(),
+    ...(result.quotaUsageToDatePercent !== undefined
+      ? { quotaUsageToDatePercent: result.quotaUsageToDatePercent.toString() }
+      : {}),
     aheadCredits: result.aheadCredits.toString(),
     aheadWorkdays: result.aheadWorkdays.toString(),
     totalWorkdays: result.totalWorkdays,
@@ -157,6 +160,10 @@ export function statusText(
       `Effective allowed lead:   ${durationLabel(result.effectiveLeadSeconds)}`,
     );
   } else {
+    const quotaUsageToDate =
+      result.quotaUsageToDatePercent !== undefined
+        ? `${decimal(result.quotaUsageToDatePercent, config.display.percentageDecimalPlaces)}%`
+        : "n/a";
     lines.push(
       `Monthly credit limit:     ${decimal(result.limitCredits, config.display.creditDecimalPlaces)}`,
       `Credits used:             ${decimal(result.usedCredits, config.display.creditDecimalPlaces)}`,
@@ -179,6 +186,7 @@ export function statusText(
           ]
         : []),
       `Scheduled by now:         ${decimal(result.scheduledCredits, config.display.creditDecimalPlaces)}`,
+      `Percent of quota usage to date: ${quotaUsageToDate}`,
       `Ahead of schedule:        ${decimal(result.aheadCredits, config.display.creditDecimalPlaces)} credits`,
       `Equivalent lead:          ${decimal(result.aheadWorkdays, 2)} workday(s)`,
       `Base allowed lead:        ${number(result.baseLeadWorkdays, 2)} workday(s)`,

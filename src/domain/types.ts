@@ -85,6 +85,7 @@ export interface WorkdayPacingResult extends PacingBaseResult {
   usedCredits: Decimal;
   remainingPercent?: Decimal;
   scheduledCredits: Decimal;
+  quotaUsageToDatePercent?: Decimal;
   aheadCredits: Decimal;
   aheadWorkdays: Decimal;
   totalWorkdays: number;

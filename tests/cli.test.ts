@@ -171,6 +171,32 @@ console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
       expect(await Bun.file(paths.state).exists()).toBe(false);
     }));
 
+  test("renders quota usage to date for the work profile", () =>
+    withTestIsolation(envNames, async () => {
+      const paths = await setupCli();
+      await Bun.write(
+        paths.command,
+        `#!/usr/bin/env bun
+console.log(JSON.stringify({ id: 1, result: {} }));
+console.log(JSON.stringify({ id: 2, result: { rateLimits: { individualLimit: {
+  planType: "business", limitId: "codex", limit: "3000", used: "500", resetsAt: 1790812800,
+} } } }));
+`,
+      );
+      await Bun.write(paths.config, 'active_profile = "work"\n');
+
+      const output: string[] = [];
+      const originalLog = console.log;
+      try {
+        console.log = (...args) => output.push(args.join(" "));
+        expect(await main(["status"])).toBe(0);
+      } finally {
+        console.log = originalLog;
+      }
+
+      expect(output.join("\n")).toContain("Percent of quota usage to date:");
+    }));
+
   test("returns integration and argument errors with useful exit codes", () =>
     withTestIsolation(envNames, async () => {
       const paths = await setupCli();
