@@ -26,8 +26,8 @@
     "smoke": "./dist/codex-usage-guard --help"
   },
   "devDependencies": {
-    "@types/bun": "1.4.0",
-    "prettier": "3.9.6",
+    "@types/bun": "1.4.2",
+    "prettier": "3.9.8",
     "typescript": "7.0.2"
   }
 }
