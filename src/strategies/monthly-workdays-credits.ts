@@ -1,6 +1,9 @@
 import { Decimal } from "../domain/decimal.ts";
 import {
+  addCivilDays,
   addUtcCalendarMonths,
+  localDateTime,
+  localMidnight,
   workdayMidnightsInUtcDateRange,
 } from "../domain/time.ts";
 import type {
@@ -36,13 +39,28 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
     const includePartialStartDate =
       addUtcCalendarMonths(snapshot.resetsAt, -1).getTime() ===
       snapshot.periodStart.getTime();
+    // Release any remaining budget on the last complete local calendar day,
+    // rather than reserving credits for a partial day before the UTC reset.
+    const finalFullDayStart = localMidnight(
+      addCivilDays(localDateTime(snapshot.resetsAt, input.timezone), -1),
+      input.timezone,
+    ).getTime();
     const allReleases = workdayMidnightsInUtcDateRange(
       snapshot.periodStart,
       snapshot.resetsAt,
       input.timezone,
       workdays,
       includePartialStartDate,
+    ).map((release) =>
+      finalFullDayStart >= snapshot.periodStart.getTime()
+        ? new Date(Math.min(release.getTime(), finalFullDayStart))
+        : release,
     );
+    if (
+      allReleases.length === 0 &&
+      finalFullDayStart >= snapshot.periodStart.getTime()
+    )
+      allReleases.push(new Date(finalFullDayStart));
     const startedReleases = allReleases.filter(
       (release) => release.getTime() <= input.now.getTime(),
     );
@@ -127,6 +145,9 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
         "Codex reported that the server-side AI Credits limit has been reached.";
       return result;
     }
+    // Once the full quota is scheduled, only the server/quota limit can block.
+    // A tiny negative lead can round to zero during Decimal division.
+    if (startedWorkdays === totalWorkdays) return result;
     if (
       aheadWorkdays.greaterThan(input.warningAfterWorkdaysAhead) &&
       (!override.unlockedUntilReset || input.warningDuringUnlock !== false)

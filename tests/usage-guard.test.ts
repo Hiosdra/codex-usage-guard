@@ -42,6 +42,61 @@ function clone<T>(value: T): T {
 }
 
 describe("UsageGuard", () => {
+  test("makes the full business quota available without persisting an unlock", async () => {
+    for (const [timezone, finalDay] of [
+      ["Europe/Warsaw", "2026-09-29T22:00:00Z"],
+      ["America/New_York", "2026-09-29T04:00:00Z"],
+    ] as const) {
+      const paths = await makePaths();
+      const state = new StateStore(paths.state);
+      const current = clone(workFixture);
+      current.result.rateLimits.individualLimit.used = "999.99";
+      current.result.rateLimits.individualLimit.remainingPercent = 0.001;
+      let now = new Date(new Date(finalDay).getTime() - 1);
+      try {
+        const config = defaultConfig();
+        config.work.timezone = timezone;
+        config.work.blockAfterWorkdaysAhead = 0;
+        config.data.cacheTtlSeconds = 0;
+        config.resetDetection.confirmationReads = 1;
+        const guard = new UsageGuard(
+          config,
+          paths,
+          state,
+          client(async () => current),
+          () => now,
+        );
+        const before = await guard.evaluate();
+        if (before.result?.profile !== "work") throw new Error("expected work");
+        expect(before.result?.decision).toBe("block");
+        expect(before.result?.estimatedUnlock?.toISOString()).toBe(
+          new Date(finalDay).toISOString(),
+        );
+        now = new Date(finalDay);
+        const after = await guard.evaluate();
+        expect(after.result?.profile).toBe("work");
+        if (after.result?.profile !== "work") throw new Error("expected work");
+        expect(after.result.decision).toBe("allow");
+        expect(after.result.scheduledCredits.toString()).toBe("1000");
+        expect(after.result.unlockedUntilReset).toBe(false);
+        expect(after.result.epochId).toBe(before.result.epochId);
+
+        current.result.rateLimits.individualLimit.resetsAt =
+          new Date("2026-11-01T00:00:00Z").getTime() / 1000;
+        current.result.rateLimits.individualLimit.used = "0";
+        current.result.rateLimits.individualLimit.remainingPercent = 100;
+        now = new Date("2026-10-01T12:00:00Z");
+        const reset = await guard.evaluate();
+        expect(reset.result?.profile).toBe("work");
+        if (reset.result?.profile !== "work") throw new Error("expected work");
+        expect(reset.result.epochId).not.toBe(after.result.epochId);
+        expect(reset.result.scheduledCredits.lessThan("1000")).toBe(true);
+        expect(reset.result.unlockedUntilReset).toBe(false);
+      } finally {
+        state.db.close();
+      }
+    }
+  });
   test("evaluates personal data, uses fresh cache, and applies overrides", async () => {
     const paths = await makePaths();
     const state = new StateStore(paths.state);

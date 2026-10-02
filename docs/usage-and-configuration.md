@@ -69,10 +69,19 @@ ahead_workdays = ahead_credits / daily_budget
 quota_usage_to_date_percent = used_credits / scheduled_credits × 100
 ```
 
-The full daily budget becomes available at local midnight. Weekends do not add
-budget, and public or company holidays are not modelled. The UTC calendar dates
-containing `periodStart` up to (but excluding) the date containing `resetsAt`
-define the workday set.
+The full daily budget becomes available at local midnight. Weekends normally do
+not add budget, and public or company holidays are not modelled. The UTC calendar
+dates containing `periodStart` up to (but excluding) the date containing
+`resetsAt` define the workday set.
+
+At local midnight starting the last full calendar day before `resetsAt`, any
+remaining scheduled budget becomes available: the schedule reaches 100% of the
+monthly quota without requiring `cug unlock`. For example, a reset on October 1
+at 02:00 in Europe/Warsaw makes the entire quota available from September 30
+at 00:00. This also applies when the last full day is a weekend. The server-side
+credit limit still blocks when the quota is exhausted.
+Short periods containing no complete local calendar day retain their normal
+workday release schedule.
 
 `cug status` reports `Percent of quota usage to date` using the last formula:
 actual credits used divided by the credits scheduled through the current date.
