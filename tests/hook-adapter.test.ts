@@ -57,6 +57,7 @@ console.log(${JSON.stringify(response)});
           await chmod(path, 0o700);
           return path;
         };
+        const resetsAt = Math.floor(Date.now() / 1000) + 7 * 86400 - 60;
         const commandFor = async (
           mode: "allow" | "warn" | "block" | "missing",
         ) =>
@@ -72,7 +73,7 @@ console.log(${JSON.stringify(response)});
                         usedPercent:
                           mode === "block" ? 40 : mode === "warn" ? 1 : 0,
                         windowDurationMins: 10080,
-                        resetsAt: 1790812800,
+                        resetsAt,
                       },
                     },
                   },

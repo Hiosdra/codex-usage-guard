@@ -27,7 +27,9 @@ async function setupCli(): Promise<{
   config: string;
   state: string;
   hooks: string;
+  resetsAt: number;
 }> {
+  const resetsAt = Math.floor(Date.now() / 1000) + 7 * 86400 - 60;
   root = await mkdtemp(join(tmpdir(), "cug-cli-"));
   const bin = join(root, "bin");
   await mkdir(bin);
@@ -41,7 +43,8 @@ if (process.argv[2] === "--version") {
 }
 console.log(JSON.stringify({ id: 1, result: {} }));
 console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
-    planType: "pro", usedPercent: 0, windowDurationMins: 10080, resetsAt: 1790812800,
+    planType: "pro", usedPercent: 0, windowDurationMins: 10080,
+    resetsAt: ${resetsAt},
 } } } }));
 `,
   );
@@ -70,7 +73,7 @@ confirmation_reads = 1
 confirmation_interval = "0s"
 `,
   );
-  return { command: codex, config, state, hooks };
+  return { command: codex, config, state, hooks, resetsAt };
 }
 
 describe("CLI", () => {
@@ -118,7 +121,8 @@ describe("CLI", () => {
         `#!/usr/bin/env bun
 console.log(JSON.stringify({ id: 1, result: {} }));
 console.log(JSON.stringify({ id: 2, result: { rateLimits: { secondary: {
-  planType: "pro", usedPercent: 40, windowDurationMins: 10080, resetsAt: 1790812800,
+  planType: "pro", usedPercent: 40, windowDurationMins: 10080,
+  resetsAt: ${paths.resetsAt},
 } } } }));
 `,
       );
