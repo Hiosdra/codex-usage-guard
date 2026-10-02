@@ -283,6 +283,33 @@ describe("monthly workday strategy", () => {
       "2026-09-30T04:00:00.000Z",
     );
   });
+  test("releases the full quota for an inferred period with no configured workday", () => {
+    const input = {
+      snapshot: work("999.99", "2026-09-26T00:00:00Z", "2026-09-28T12:00:00Z"),
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      timezone: "UTC",
+      baseLeadWorkdays: 0,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    };
+    const before = strategy.evaluate({
+      ...input,
+      now: new Date("2026-09-26T23:59:59.999Z"),
+    });
+    expect(before.decision).toBe("block");
+    expect(before.scheduledCredits.isZero()).toBe(true);
+    expect(before.estimatedUnlock?.toISOString()).toBe(
+      "2026-09-27T00:00:00.000Z",
+    );
+    const after = strategy.evaluate({
+      ...input,
+      now: new Date("2026-09-27T00:00:00Z"),
+    });
+    expect(after.decision).toBe("allow");
+    expect(after.scheduledCredits.toString()).toBe("1000");
+    expect(after.totalWorkdays).toBe(1);
+    expect(after.startedWorkdays).toBe(1);
+  });
   test("allows credits below the limit even if a tiny negative lead rounds to zero", () => {
     const result = strategy.evaluate({
       snapshot: work(`999.${"9".repeat(50)}`),

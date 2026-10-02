@@ -56,6 +56,11 @@ export class MonthlyAiCreditsWorkdaysStrategy implements PacingStrategy<
         ? new Date(Math.min(release.getTime(), finalFullDayStart))
         : release,
     );
+    if (
+      allReleases.length === 0 &&
+      finalFullDayStart >= snapshot.periodStart.getTime()
+    )
+      allReleases.push(new Date(finalFullDayStart));
     const startedReleases = allReleases.filter(
       (release) => release.getTime() <= input.now.getTime(),
     );
