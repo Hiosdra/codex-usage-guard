@@ -190,6 +190,112 @@ describe("weekly strategy", () => {
 
 describe("monthly workday strategy", () => {
   const strategy = new MonthlyAiCreditsWorkdaysStrategy();
+  test("releases the entire quota at the start of the last full local day", () => {
+    const cases: [string, string, string, boolean?][] = [
+      ["Europe/Warsaw", "2026-10-01T00:00:00Z", "2026-09-29T22:00:00Z"],
+      ["Europe/Warsaw", "2026-12-01T00:00:00Z", "2026-11-29T23:00:00Z"],
+      ["America/New_York", "2026-10-01T00:00:00Z", "2026-09-29T04:00:00Z"],
+      ["UTC", "2026-10-01T00:00:00Z", "2026-09-30T00:00:00Z"],
+      // A partial UTC reset date, including a weekend final full day.
+      ["Europe/Warsaw", "2026-09-30T23:00:00Z", "2026-09-29T22:00:00Z", true],
+      ["America/New_York", "2026-09-29T00:00:00Z", "2026-09-27T04:00:00Z"],
+      // DST changes inside the final full day (23 and 25 hours).
+      ["Europe/Warsaw", "2026-03-30T00:00:00Z", "2026-03-28T23:00:00Z", true],
+      ["Europe/Warsaw", "2026-10-26T00:00:00Z", "2026-10-24T22:00:00Z", true],
+    ];
+    for (const [timezone, reset, finalDay, alreadyReleased] of cases) {
+      const snapshot = work(
+        "999.99",
+        addUtcCalendarMonths(new Date(reset), -1).toISOString(),
+        reset,
+      );
+      const evaluate = (now: Date, value = snapshot) =>
+        strategy.evaluate({
+          snapshot: value,
+          override: noOverride("work", "monthly_ai_credits_workdays"),
+          now,
+          timezone,
+          baseLeadWorkdays: 0,
+          warningAfterWorkdaysAhead: 0,
+          epochId: "synthetic",
+        });
+      const boundary = new Date(finalDay);
+      const before = evaluate(new Date(boundary.getTime() - 1));
+      if (alreadyReleased) {
+        // This period already releases all workday budgets a day earlier.
+        expect(before.decision).toBe("allow");
+      } else {
+        expect(before.decision).toBe("block");
+        expect(before.estimatedUnlock?.getTime()).toBe(boundary.getTime());
+      }
+      for (const now of [boundary, new Date(snapshot.resetsAt.getTime() - 1)]) {
+        const result = evaluate(now);
+        expect(result.decision).toBe("allow");
+        expect(result.scheduledCredits.toString()).toBe("1000");
+        expect(result.startedWorkdays).toBe(result.totalWorkdays);
+        expect(result.quotaUsageToDatePercent?.toString()).toBe("99.999");
+        expect(result.unlockedUntilReset).toBe(false);
+      }
+      for (const exhausted of [
+        { ...snapshot, serverLimitReached: true },
+        { ...snapshot, usedCredits: new Decimal("1000") },
+        { ...snapshot, remainingPercent: Decimal.zero() },
+      ]) {
+        expect(evaluate(boundary, exhausted).decision).toBe("block");
+      }
+    }
+  });
+  test("releases custom workdays together and estimates their shared unlock", () => {
+    const input = {
+      snapshot: work("999.99", "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"),
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      timezone: "America/New_York",
+      workdays: [2, 3],
+      baseLeadWorkdays: 0,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    };
+    const boundary = new Date("2026-09-29T04:00:00Z");
+    const before = strategy.evaluate({
+      ...input,
+      now: new Date(boundary.getTime() - 1),
+    });
+    expect(before.decision).toBe("block");
+    expect(before.estimatedUnlock?.getTime()).toBe(boundary.getTime());
+    const after = strategy.evaluate({ ...input, now: boundary });
+    expect(after.startedWorkdays - before.startedWorkdays).toBe(2);
+    expect(after.scheduledCredits.toString()).toBe("1000");
+    expect(after.decision).toBe("allow");
+  });
+  test("does not accelerate short inferred periods with no full local day", () => {
+    const result = strategy.evaluate({
+      snapshot: work("100", "2026-09-30T02:00:00Z", "2026-10-01T00:00:00Z"),
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      now: new Date("2026-09-30T03:00:00Z"),
+      timezone: "America/New_York",
+      baseLeadWorkdays: 0,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    });
+    expect(result.startedWorkdays).toBe(0);
+    expect(result.decision).toBe("block");
+    expect(result.estimatedUnlock?.toISOString()).toBe(
+      "2026-09-30T04:00:00.000Z",
+    );
+  });
+  test("allows credits below the limit even if a tiny negative lead rounds to zero", () => {
+    const result = strategy.evaluate({
+      snapshot: work(`999.${"9".repeat(50)}`),
+      override: noOverride("work", "monthly_ai_credits_workdays"),
+      now: new Date("2026-10-31T00:00:00Z"),
+      timezone: "Europe/Warsaw",
+      baseLeadWorkdays: 0,
+      warningAfterWorkdaysAhead: 0,
+      epochId: "synthetic",
+    });
+    expect(result.aheadWorkdays.isZero()).toBe(true);
+    expect(result.decision).toBe("allow");
+  });
   test("allocates a full daily budget at local midnight", () => {
     const snapshot = work("100");
     const result = strategy.evaluate({
